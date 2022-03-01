@@ -4,19 +4,16 @@
 a tool for tailoring image
 
 #### Software Architecture
-Software architecture description
+noarch
 
 #### Installation
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+yum install imageTailor
 
 #### Instructions
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+cd /opt/imageTailor
+./mkdliso -h
 
 #### Contribution
 

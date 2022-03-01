@@ -1,0 +1,2265 @@
+:<<!
+ * Copyright (c) Huawei Technologies Co., Ltd. 2018-2022. All rights reserved.
+ * imageTailor licensed under the Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
+ * PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ * Author:
+ * Create: 2022-02-28
+ * Description: provide image Tailor function, used as the main entrance
+!
+
+#!/bin/bash
+
+#########################################################
+# System variables
+#########################################################
+CURRENT_PATH=$(pwd)
+ISO_ARCH=$(uname -m)
+PRODUCT_NAME=""
+SYSTEM_TYPE=""
+RELEASE_TYPE=""
+RELEASE_BOOTLOADER_TYPE=""
+UMASK_BAK=$(umask)
+umask 0022
+
+KIWI_EULERLINUX_GRUB2="kiwi/grub2"
+PRODUCT_CONF="kiwi/eulerkiwi/product.conf"
+PRODUCT_TYPE=""
+
+if [ "${ISO_ARCH}" = "x86_64" ]; then
+  SYS_CONFIG_NAME="EulerLinux.conf"
+else
+  SYS_CONFIG_NAME="euler-release"
+fi
+
+#########################################################
+# avail enumeration list
+#########################################################
+AVAIL_PRODUCT=$(cat $PRODUCT_CONF | grep -v "^#" | grep -v "^$" | awk -F " " '{print $1}' | tr -t '\n' ' ')
+AVAIL_PRODUCT_NAME="("${AVAIL_PRODUCT}")"
+
+AVAIL_CUT_LEVEL=("yes" "debug" "no")
+AVAIL_USRRPM_CUT_LEVEL=("yes" "no")
+AVAIL_SYSTEM_TYPE=("EMBEDDED" "SERVER")
+AVAIL_REPOSITORY_TYPE=("red-carpet" "rpm-dir" "rpm-md" "yast2")
+AVAIL_BOOTLOADER_TYPE=("GRUB" "GRUB2")
+AVAIL_SYS_UTC=("yes" "no")
+
+AVAIL_PRODUCT_MEM=$(cat $PRODUCT_CONF | grep -v "^#" | grep -v "^$" | grep "MEMORY" | awk -F " " '{print $1}')
+AVAIL_PRODUCT_MEM_NAME="("${AVAIL_PRODUCT_MEM}")"
+KERNEL_VERSION_NUM=5 # repos/euler_base/kernel-5*
+
+#########################################################
+# minios val
+#########################################################
+MAKE_MINIOS_FLAG=
+AVAIL_MAKE_MINIOS_FLAG=("yes" "no" "force")
+MINIOS_KIWI_CONF=kiwi/eulerkiwi/minios.conf
+KIWI_MINIOS="kiwi/minios"
+MINIOS_CUSTOM_CONF_PATH=""
+MINIOS_BOOT_SHA256="boot.sha256"
+MINIOS_SHA256="minios.sha256"
+MINIOS_FILELIST="filelist"
+MINIOS_MAKE_FLAG="FALSE" # TRUE means is making minios
+
+#########################################################
+# when "--sec" in params, do security harden, default is not
+#########################################################
+SEC_HARDEN=0
+
+#########################################################
+# enable sysenhance
+#########################################################
+export EULEROS_SECURITY=0
+
+#########################################################
+# for basic arm
+#########################################################
+SYSCONFIGFILE=""
+
+#########################################################
+# compile environment tool path
+#########################################################
+COMPILE_ENV=""
+
+#########################################################
+# for kiwi
+#########################################################
+KIWI_ISOBOOT="/usr/share/kiwi/custom_boot/pxeboot"
+KIWI_MODULES="/usr/share/kiwi/modules/"
+KIWI_METADATA="/usr/share/kiwi/metadata/"
+KIWI_STRIP_XML="/usr/lib/python3.9/site-packages/kiwi/config/strip.xml"
+KIWI_EULERLINUX_DOPRA_IMAGE="${KIWI_ISOBOOT}/dopralinuximage"
+KIWI_EULERLINUX_IMAGE="${KIWI_ISOBOOT}/eulerlinuximage"
+KIWI_EULERLINUX_ISO="kiwi/eulerlinuxiso"
+KIWI_EL_RELEASE="/usr/share/kiwi/el_release"
+
+#########################################################
+# sys custom conf path
+#########################################################
+SYS_CUSTOM_CONF_PATH=""
+SYS_CUSTOM_STRIPTOOLS=""
+SYS_CUSTOM_XML=""
+SYS_CUSTOM_CONFIG=""
+SYS_CUSTOM_USERRPM=""
+SYS_CUSTOM_USERFILE=""
+SYS_CUSTOM_USERINSTALL=""
+SYS_CUSTOM_USERHOOK=""
+SYS_CUSTOM_USERCONF=""
+
+#########################################################
+# result dir
+#########################################################
+MKISO_RESULT="result"
+MKISO_LOG="${MKISO_RESULT}/log"
+MAXLOGNUM=50
+
+ISO_NAME="openEuler-${ISO_ARCH}.iso"
+ISO_SHA256="$ISO_NAME.sha256"
+
+RELEASE_TAR_NAME='os_release.tgz'
+RELEASE_TAR_SHA256='os_release.tgz.sha256'
+
+MKDLISO_PID="/var/run/mkdliso.pid" # current process number
+
+#########################################################
+# tmp dir/file for mkdliso
+#########################################################
+MKISO_WORKSPACE=$CURRENT_PATH/mkiso_workspace
+MKISO_TMPLOG_WORKSPACE=$MKISO_WORKSPACE/sys_custom_log
+USRCUSTOM_TMPCFG_PATH=$MKISO_WORKSPACE/cfg_$$
+CFGTABLE_CONF=$MKISO_WORKSPACE/cfgtable.conf_$$
+MYISO="$MKISO_WORKSPACE/sys_custom_$$"
+MYISO_RESULT="$MKISO_WORKSPACE/sys_custom-result_$$"
+CD="$MYISO_RESULT/cd_root"
+
+#########################################################
+# 功能：将initrd/linux目录建立软链接后打成os_release.tgz
+# 规则：内部功能
+#########################################################
+function make_os_release_for_tar() {
+  local initrd_file=$(ls ${MYISO_RESULT} | grep initrd$)
+  local linux_file=$(ls ${MYISO_RESULT} | grep kernel$)
+
+  echo "Creating TAR image ..."
+  rm -rf $CD
+  mkdir -p $CD
+  cp ${MYISO_RESULT}/$initrd_file $CD/initrd
+  cp ${MYISO_RESULT}/$linux_file $CD/linux
+  rm -rf $KIWI_EL_RELEASE/hook
+  cp -a $KIWI_EL_RELEASE/* $CD/
+
+  pushd $CD
+  mv linux bzImage_osp
+  mv initrd initrd_osp
+  ln -s bzImage_osp bzImage
+  ln -s initrd_osp initrd
+  tar -zcf $RELEASE_TAR_NAME *
+  cp $RELEASE_TAR_NAME ${MYISO_RESULT}
+  popd
+}
+
+#########################################################
+# 制作ISO启动文件
+# X86：制作OS.tar.gz，生成isolinux.cfg文件
+# ARM：制作linux.gz
+#########################################################
+function make_iso_boot_file() {
+  local initrd_file=$(ls ${MYISO_RESULT} | grep initrd$)
+  local linux_file=$(ls ${MYISO_RESULT} | grep kernel$)
+
+  echo "Creating OS.tar.gz ..."
+  rm -rf $CD
+  mkdir -p $CD/repo
+  cp ${MYISO_RESULT}/$initrd_file $CD/repo/initrd
+  cp ${MYISO_RESULT}/$linux_file $CD/repo/linux
+
+  pushd $CD/repo/
+  tar czf OS.tar.gz *
+  sha256sum OS.tar.gz >OS.tar.gz.sha256
+  rm -rf linux initrd
+  popd
+
+  if [ ! -f $CD/repo/OS.tar.gz ]; then
+    echo "error: create OS.tar.gz failed"
+    return 1
+  fi
+  chmod 0755 $CD/repo/*
+
+  if [ "${ISO_ARCH}" = "aarch64" ]; then
+    echo "Creating linux.gz for aarch64 ..."
+    cp -a $KIWI_EL_RELEASE/* $CD/
+
+    pushd $CD/
+    mkdir -p all
+    mv hook/* all 2>&1
+    mv conf/* all
+    popd
+
+    pushd $CD/boot
+    cp linux linux.gz
+    gunzip --test linux.gz
+    if [ $? -eq 0 ]; then
+      mv linux linux.gz
+      gunzip linux.gz
+    else
+      rm -rf linux.gz
+    fi
+    popd
+
+    return
+  fi
+
+  echo "Creating isolinux.cfg for x86_64 ..."
+  local isolinuxdir="$CD/isolinux"
+  mkdir -p $isolinuxdir
+  local eulerlinuxpath="/usr/share/kiwi/config"
+  local eulersyslinuxpath="/usr/share/syslinux" # only for x86_64
+
+  cp -a $eulerlinuxpath/splash.jpg $isolinuxdir/splash.jpg
+  if [ "${ISO_ARCH}" = "x86_64" ]; then
+    cp -a $eulersyslinuxpath/vesamenu.c32 $isolinuxdir/vesamenu.c32
+    cp -a $eulersyslinuxpath/isolinux.bin $isolinuxdir/isolinux.bin
+    cp -a $eulersyslinuxpath/ldlinux.c32 $isolinuxdir/ldlinux.c32
+    cp -a $eulersyslinuxpath/libcom32.c32 $isolinuxdir/libcom32.c32
+    cp -a $eulersyslinuxpath/libutil.c32 $isolinuxdir/libutil.c32
+    cp -a $eulersyslinuxpath/chain.c32 $isolinuxdir/chain.c32
+  else
+    cp -a $eulerlinuxpath/vesamenu.c32 $isolinuxdir/vesamenu.c32
+    cp -a $eulerlinuxpath/isolinux.bin $isolinuxdir/isolinux.bin
+    cp -a $eulerlinuxpath/ldlinux.c32 $isolinuxdir/ldlinux.c32
+    cp -a $eulerlinuxpath/libcom32.c32 $isolinuxdir/libcom32.c32
+    cp -a $eulerlinuxpath/libutil.c32 $isolinuxdir/libutil.c32
+  fi
+
+  local eulerlinux_cfgpath="$isolinuxdir/isolinux.cfg"
+  echo "default vesamenu.c32" >>$eulerlinux_cfgpath
+  echo "#prompt 1" >>$eulerlinux_cfgpath
+  echo "timeout 300" >>$eulerlinux_cfgpath
+  echo "" >>$eulerlinux_cfgpath
+  echo "display boot.msg" >>$eulerlinux_cfgpath
+  echo "#ff000000" >>$eulerlinux_cfgpath
+  echo "menu background splash.jpg" >>$eulerlinux_cfgpath
+  echo "menu title Welcome to openEuler!" >>$eulerlinux_cfgpath
+  echo "menu color border 0 #ffffffff #00000000" >>$eulerlinux_cfgpath
+  echo "menu color sel 7 #00000000 #ffffffff" >>$eulerlinux_cfgpath
+  echo "menu color title 0 #ffffffff #00000000" >>$eulerlinux_cfgpath
+  echo "menu color tabmsg 0 #00000000 #00000000" >>$eulerlinux_cfgpath
+  echo "menu color unsel 0 #ffffffff #00000000" >>$eulerlinux_cfgpath
+  echo "menu color hotsel 7 #00000000 #ffffffff" >>$eulerlinux_cfgpath
+  echo "menu color hotkey 7 #ffffffff #00000000" >>$eulerlinux_cfgpath
+  echo "menu color scrollbar 0 #ffffffff #00000000" >>$eulerlinux_cfgpath
+  echo "menu color background 0 #ffffffff #00000000" >>$eulerlinux_cfgpath
+  echo "" >>$eulerlinux_cfgpath
+  echo "" >>$eulerlinux_cfgpath
+  echo "#0xffff" >>$eulerlinux_cfgpath
+  echo "label local" >>$eulerlinux_cfgpath
+  echo "  menu label Boot from local disk" >>$eulerlinux_cfgpath
+  echo "  menu default" >>$eulerlinux_cfgpath
+
+  if [ "${ISO_ARCH}" = "x86_64" ]; then
+    echo "  kernel chain.c32" >>$eulerlinux_cfgpath
+    echo "  append hd0 0" >>$eulerlinux_cfgpath
+  else
+    echo "  localboot 0x80" >>$eulerlinux_cfgpath
+  fi
+
+  echo "" >>$eulerlinux_cfgpath
+  echo "# install" >>$eulerlinux_cfgpath
+  echo "label linux" >>$eulerlinux_cfgpath
+  echo "  menu label Install" >>$eulerlinux_cfgpath
+  echo "  kernel /boot/linux" >>$eulerlinux_cfgpath
+
+  local sysconfig="$USRCUSTOM_TMPCFG_PATH/$SYS_CONFIG_NAME"
+  local iso_cmdline=${RELEASE_ISO_CMDLINE}
+  . $sysconfig
+  echo '  append initrd=/boot/initrd' $iso_cmdline $sys_kernelparam >>$eulerlinux_cfgpath
+  cp -a $KIWI_EL_RELEASE/* $CD/
+
+  pushd $CD/
+  mv hook all
+  mv conf all
+  popd
+
+  echo size=$(du -h $CD/repo/OS.tar.gz | cut -f1) >>$CD/all/cfg/isopackage.sdf
+  cd $CD && find repo -type f >filelist 2>/dev/null && cd -
+
+}
+
+#########################################################
+# 功能：根据initrd创建os_release.tgz
+#########################################################
+function make_os_release_for_dproj() {
+  echo "Creating os_release.tgz by initrd ..."
+  local initrd_file=$(ls ${MYISO_RESULT} | grep initrd$)
+
+  rm -rf $CD
+  mkdir -p $CD
+
+  cp ${MYISO_RESULT}/$initrd_file $CD/initrd
+
+  pushd $CD
+  mv initrd $RELEASE_TAR_NAME
+  cp $RELEASE_TAR_NAME ${MYISO_RESULT}/
+  popd
+
+}
+
+#########################################################
+# 功能：区分架构的attr属性，制作iso
+#########################################################
+function make_iso_server() {
+  echo "Creating ISO image ..."
+  local attr="-R -J -T -r -l -d -input-charset \"utf-8\" -allow-multidot "
+  if [ "${ISO_ARCH}" = "aarch64" ]; then
+    attr="${attr} -e efibootimg -no-emul-boot -c boot.catalog -hide boot.catalog -hide efibootimg"
+  else
+    attr="${attr} -allow-leading-dots -no-bak -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table "
+    if [ "$RELEASE_BOOTLOADER_TYPE" == "GRUB2" ]; then
+      attr="${attr} -eltorito-alt-boot -e boot/x86_64/efi -no-emul-boot"
+    fi
+  fi
+
+  which mkisofs 2>&1
+  if [ $? -ne 0 ]; then
+    echo "error: not find mkisofs, please install mkisofs command"
+    return 1
+  fi
+
+  local dest="${MYISO_RESULT}/eulerlinux.${ISO_ARCH}.iso"
+  local src="$CD"
+  echo "mkisofs $attr -o $dest $src"
+  mkisofs $attr -o $dest $src
+  if [ $? -ne 0 ]; then
+    echo "error: mkisofs $attr -o $dest $src failed"
+    return 1
+  fi
+}
+
+#########################################################
+# 功能：显示帮助信息
+#########################################################
+function fn_usage() {
+  cat <<EOF
+-------------------------------------------------------------------------------------------------------------
+Usage: mkdliso -p product_name -c configpath [--minios yes|no|force] [-h] [--sec]
+Options:
+    -p,--product     Specify the product to make, check custom/cfg_yourProduct.
+    -c,--cfg-path    Specify the configuration file path, the form should be consistent with custom/cfg_xxx
+    --minios         Make minios: yes|no|force
+    --sec            Perform security hardening
+    -h,--help        Display help information
+
+Example:
+    command:
+    ./mkdliso -p openEuler -c custom/cfg_openEuler --sec
+
+    help:
+    ./mkdliso -h
+-------------------------------------------------------------------------------------------------------------
+EOF
+
+  return 0
+}
+
+#########################################################
+# get info from log file between two lines
+# 功能： 从日志文件中根据关键字截取某2行中间的文本写入指定文件
+#########################################################
+function fn_get_info_between_two_lines() {
+  startline=$1
+  endline=$2
+  logfile=$3
+  outputfile=$4
+  num1=$(grep -n "$startline" "$logfile" | tail -1 | awk -F ':' '{print $1}')
+  num2=$(grep -n "$endline" "$logfile" | tail -1 | awk -F ':' '{print $1}')
+  if [ -n "$num1" -a -n "$num2" ]; then
+    let num1++
+    let num2--
+    mkdir -p $(dirname "$outputfile")
+    sed -n "${num1},${num2}p" "$logfile" >"$outputfile"
+    if [ ! -s "$outputfile" ]; then
+      return 1
+    fi
+  else
+    return 1
+  fi
+}
+
+#########################################################
+# get src infomation from log
+# 功能：截取"print src"/"bin"/"bootstrap"日志
+#########################################################
+function get_src_info_from_log() {
+  local log_file="${MYISO_RESULT}/build/image-root.log"
+  local src_result_file="${MKISO_TMPLOG_WORKSPACE}/src_info_list"
+  local src_rpmlist_file="${MKISO_TMPLOG_WORKSPACE}/source.rpmlist"
+  local bin_rpmlist_file="${MKISO_TMPLOG_WORKSPACE}/binary.rpmlist"
+  local parse_workdir="parse_work_dir"
+  local parse_rpmlistdir="$parse_workdir/rpmlist_dir"
+  local parse_file="$parse_workdir/parse_output_file"
+  local rpm_and_src_file="$parse_workdir/rpm_and_src_file"
+
+  rm -rf "$parse_workdir"
+  mkdir -p "$parse_workdir"
+  mkdir -p "$parse_rpmlistdir"
+
+  grep "get src info error" "$log_file"
+  if [ $? -eq 0 ]; then
+    return 1
+  fi
+
+  fn_get_info_between_two_lines "start print src info" "end print src info" "$log_file" "$parse_file"
+  if [ $? -eq 0 ]; then
+    cat "$parse_file" | awk '{print $4}' | sort | uniq | sed -E "s/(.*)-(.*-)/\1:\2/" | sed 's/.euleros.*//g' | sed 's/.h[0-9]*$//g' >"$src_result_file"
+    cat "$parse_file" | awk '{print $4}' | sort | uniq | sed -E "s/(.*)-(.*-)/\1:\2/" >"$src_rpmlist_file"
+    fn_get_info_between_two_lines "start print bin info" "end print bin info" "$log_file" "$parse_file"
+    if [ $? -eq 0 ]; then
+      cat "$parse_file" | awk '{print $4}' | sort | uniq | sed -E "s/(.*)-(.*-)/\1:\2/" | sed -E 's/(.*)\.(.*)/\1:\2/' >"$bin_rpmlist_file"
+    fi
+    rm -rf "$parse_workdir"
+    return 0
+  fi
+
+  fn_get_info_between_two_lines "bootstrap: Installed:" "bootstrap: Complete" "$log_file" "$parse_file"
+  if [ $? -ne 0 ]; then
+    rm -rf "$parse_workdir"
+    return 1
+  fi
+
+  for rpmn in $(cat "$parse_file" | awk '{print $5}'); do
+    find_rpm=$(find ./repos -name ${rpmn}.rpm)
+    if [ -z "$find_rpm" ]; then
+      if echo ${rpmn} | grep ":" >/dev/null 2>&1; then
+        new_name=$(echo $rpmn | sed 's/[0-9]*://g')
+        find_rpm=$(find ./repos -name ${new_name}.rpm)
+
+      fi
+      if [ -z "$find_rpm" ]; then
+        echo "error: not find ${rpmn}"
+        rm -rf "$parse_workdir"
+        return 1
+      fi
+    fi
+    rpm -qpl "$find_rpm" >"$parse_rpmlistdir/$(basename $find_rpm)" 2>/dev/null
+    echo $(basename $find_rpm) $(rpm -qp --qf "%{SOURCERPM}" $find_rpm 2>/dev/null | sed 's/.src.rpm//g') >>"$rpm_and_src_file"
+  done
+
+  fn_get_info_between_two_lines "start print initrd file list" "end print initrd file list" "$log_file" "$parse_file"
+  if [ $? -ne 0 ]; then
+    rm -rf "$parse_workdir"
+    return 1
+  fi
+
+  for file in $(cat "$parse_file" | awk '{print $4}'); do
+    find_rpm=$(grep ^$file$ $parse_rpmlistdir/* | awk -F ':' '{print $1}')
+    if [ -n "$find_rpm" ]; then
+      for rname in $find_rpm; do
+        grep $(basename $rname) "$rpm_and_src_file" >>"$parse_workdir/find_src"
+      done
+    fi
+  done
+  cat "$parse_workdir/find_src" | awk '{print $2}' | sort | uniq | sed -E "s/(.*)-(.*-)/\1:\2/" | sed 's/.euleros.*//g' | sed 's/.h[0-9]*$//g' >"$src_result_file"
+  cat "$parse_workdir/find_src" | awk '{print $2}' | sort | uniq | sed -E "s/(.*)-(.*-)/\1:\2/" >"$src_rpmlist_file"
+  cat "$parse_workdir/find_src" | awk '{print $1}' | sort | uniq | sed -E "s/(.*)-(.*-)/\1:\2/" | sed -E 's/(.*)\.(.*)/\1:\2/' >"$bin_rpmlist_file"
+  rm -rf "$parse_workdir"
+
+}
+
+#########################################################
+# log manage
+# 功能：根据MAXLOGNUM清理日志
+#########################################################
+function fn_log_manage() {
+  local sys_custom_log=${MYISO_RESULT}/build/image-root.log
+  local minios_log=/tmp/minios_$$.log
+  local sysenhance_log=/tmp/sysenhance.log
+  local sys_custom_log_array=()
+  local newtmplogdir=sys_custom_log_$(date '+%Y%m%d%H%M%S')
+  local arraynum=
+
+  if [ ! -d ${MKISO_TMPLOG_WORKSPACE} ]; then
+    return 1
+  fi
+  if [ ! -f $sys_custom_log ]; then
+    return 1
+  fi
+
+  get_src_info_from_log
+  if [ $? -ne 0 ]; then
+    echo "warning: get src rpm info failed from log, skip"
+  fi
+
+  mv $sys_custom_log ${MKISO_TMPLOG_WORKSPACE}/sys_custom_$$.log
+  if [ -f "$minios_log" ]; then
+    mv $minios_log ${MKISO_TMPLOG_WORKSPACE} >/dev/null 2>&1
+  fi
+
+  if [ -f "$sysenhance_log" ]; then
+    mv $sysenhance_log ${MKISO_TMPLOG_WORKSPACE} >/dev/null 2>&1
+  fi
+
+  mv ${MKISO_TMPLOG_WORKSPACE} $MKISO_WORKSPACE/$newtmplogdir
+  echo "move all mkdliso log file to $MKISO_LOG/${newtmplogdir}.tar.gz"
+
+  cd $MKISO_WORKSPACE
+  tar -zcf ${newtmplogdir}.tar.gz $newtmplogdir
+  if [ $? -ne 0 ]; then
+    echo "warning: tar $MKISO_TMPLOG_WORKSPACE failed, and remove $MKISO_WORKSPACE/$newtmplogdir, skip"
+    cd - >/dev/null 2>&1
+    return 1
+  fi
+  cd - >/dev/null 2>&1
+  mv $MKISO_WORKSPACE/${newtmplogdir}.tar.gz $MKISO_LOG
+
+  sys_custom_log_array=$(ls -t $MKISO_LOG/sys_custom_log_*.tar.gz 2>/dev/null)
+  sys_custom_log_array=(${sys_custom_log_array})
+  arraynum=${#sys_custom_log_array}
+  if [ $arraynum -gt $MAXLOGNUM ]; then
+    echo "the number of log file in $MKISO_LOG more than $MAXLOGNUM, will delete old logfile"
+    for ((i = $MAXLOGNUM; i < arraynum; i++)); do
+      echo "delete old logfile ${sys_custom_log_array[i]}"
+      rm -rf ${sys_custom_log_array[i]}
+    done
+  fi
+
+  return 0
+}
+
+#########################################################
+# 功能：清理环境
+# 入参：initflag仅kiwi初始化传入1，其他调用默认不传
+# 规则：
+# 1、清理日志文件
+# 2、initflag为1时，清理临时日志和pid标志位
+# 3、取消挂载
+# 4、initflag为1时，清理yum缓存
+#########################################################
+
+function fn_do_clean() {
+  local ret=0
+  local initflag=$1
+
+  fn_log_manage
+
+  if [ "$initflag" != "1" ]; then
+    rm -rf /tmp/minios_*.log
+    rm -rf $MKDLISO_PID
+  fi
+
+  rm -rf $KIWI_EULERLINUX_ISO/config.xml
+  rm -rf $KIWI_EULERLINUX_IMAGE/root/*
+  rm -rf $KIWI_EULERLINUX_ISO/security_s.conf
+  if [ -f $KIWI_METADATA/KIWIConfig.xml.bak ]; then
+    mv $KIWI_METADATA/KIWIConfig.xml.bak $KIWI_METADATA/KIWIConfig.xml
+  fi
+
+  rm -rf /var/lock/kiwi* >/dev/null 2>&1
+  mount | awk '{print $3}' | grep ^"${MKISO_WORKSPACE}" >/tmp/mkdliso_mount_$$
+  while read line; do
+    umount "${line}"
+    if [ $? -ne 0 ]; then
+      umount -l "${line}"
+      if [ $? -ne 0 ]; then
+        ret=$?
+        echo "warning: umount ${line} failed, please check it, it may lead to mkdliso failed"
+      fi
+    fi
+  done </tmp/mkdliso_mount_$$
+
+  rm -rf /var/cache/kiwi/* >/dev/null 2>&1
+  rm -rf /tmp/mkdliso_mount_* >/dev/null 2>&1
+  rm -rf ${CFGTABLE_CONF} >/dev/null 2>&1
+  rm -rf ${USRCUSTOM_TMPCFG_PATH} >/dev/null 2>&1
+  rm -rf ${MYISO} >/dev/null 2>&1
+  rm -rf ${MYISO_RESULT} >/dev/null 2>&1
+  rm -rf ${MKISO_WORKSPACE} >/dev/null 2>&1
+  rm -rf kiwi/eulerlinuximage/root/*
+  rm -rf kiwi/eulerlinuxiso/root/*
+
+  if [ "$initflag" != "1" ]; then
+    rm -rf /var/cache/yum/eulercache
+    rm -rf $CURRENT_PATH/repos/yum.conf
+  fi
+
+  return $ret
+
+}
+
+#########################################################
+# 功能: 校验并设置cfg配置路径
+# 规则：
+# 1、目录下必须包含rpm.conf和sys.conf文件
+#########################################################
+function check_cfgpath() {
+  local cfgpath=$1
+
+  if [ ! -d "$cfgpath" ]; then
+    echo "error: cfgpath must be a directory"
+    return 1
+  fi
+
+  if [ ! -f "$cfgpath/rpm.conf" ]; then
+    echo "error: $cfgpath/rpm.conf is not exist"
+    return 1
+  fi
+
+  if [ ! -f "$cfgpath/sys.conf" ]; then
+    echo "error: $cfgpath/sys.conf is not exist"
+    return 1
+  fi
+
+  SYS_CUSTOM_CONF_PATH=$cfgpath
+  MINIOS_BOOT=$SYS_CUSTOM_CONF_PATH/usr_install/boot
+
+  return 0
+}
+
+#########################################################
+# 功能：校验并设置产品名称
+# 规则：
+# 1、输入范围：$PRODUCT_CONF
+#########################################################
+function check_product() {
+  local product_name=$1
+
+  echo "${AVAIL_PRODUCT_NAME[*]}" | grep -w "${product_name}" >/dev/null 2>&1
+  if [ $? -ne 0 ]; then
+    echo "error: product_name not config, see ${PRODUCT_CONF}"
+    return 1
+  fi
+
+  PRODUCT_NAME=${product_name}
+
+  ISO_NAME="${product_name}-${ISO_ARCH}.iso"
+  ISO_SHA256="$ISO_NAME.sha256"
+
+  return 0
+}
+
+#########################################################
+# 功能：校验并设置minios_flag
+# 规则：
+# 1、输入范围：$AVAIL_MAKE_MINIOS_FLAG
+#########################################################
+function check_minios() {
+  local minios_flag=$1
+
+  echo "${AVAIL_MAKE_MINIOS_FLAG[*]}" | grep -w "${minios_flag}" >/dev/null 2>&1
+  if [ $? -ne 0 ]; then
+    echo "error: make minios flag must be one of ${AVAIL_MAKE_MINIOS_FLAG[*]}"
+    return 1
+  fi
+
+  MAKE_MINIOS_FLAG=$minios_flag
+  return 0
+
+}
+
+#########################################################
+# 功能：校验入参格式
+# 规则
+# 1、参数个数大于0
+# 2、-p/--product 和 -c/-cfg-path 参数必选
+# 3、对参数进行枚举和功能校验，不允许出现例外参数
+#########################################################
+function fn_verify_input() {
+  local input_param=$@
+
+  if [ $# -lt 1 ]; then
+    echo "error: missing param, please check it"
+    exit 1
+  fi
+
+  if [ -z "$(echo "$input_param" | grep -w "\-p")" -a -z "$(echo $input_param | grep -w "\-\-product")" -a $# -gt 1 ]; then
+    echo "error: missing param -p or --product"
+    exit 1
+  fi
+
+  if [ -z "$(echo "$input_param" | grep -w "\-c")" -a -z "$(echo $input_param | grep -w "\-\-cfg\-path")" -a $# -gt 1 ]; then
+    echo "error: missing param -c or --cfg-path"
+    exit 1
+  fi
+
+  while [ $# -ge 1 ]; do
+    case "$1" in
+    -h | --help)
+      fn_usage
+      exit 0
+      ;;
+    -p | --product)
+      check_product $2
+      if [ $? -eq 0 ]; then
+        shift 2
+      else
+        exit 1
+      fi
+      ;;
+    -c | --cfg-path)
+      check_cfgpath $2
+      if [ $? -eq 0 ]; then
+        shift 2
+      else
+        exit 1
+      fi
+      ;;
+    --minios)
+      check_minios $2
+      if [ $? -eq 0 ]; then
+        shift 2
+      else
+        exit 1
+      fi
+      ;;
+    --sec)
+      SEC_HARDEN=1
+      shift 1
+      ;;
+    *)
+      echo "error: params is invalid, please check it."
+      exit 1
+      ;;
+    esac
+  done
+
+  if [ -z "$SYS_CUSTOM_CONF_PATH" -o -z "$PRODUCT_NAME" ]; then
+    echo "error: cfgpath or product is null, please check it."
+    fn_usage
+    exit 1
+  fi
+
+  return 0
+
+}
+#########################################################
+# check sys conf
+# 功能：校验系统配置
+#########################################################
+function fn_check_sysconf() {
+  local sysconf=$1
+  local sysconf_path="${SYS_CUSTOM_CONF_PATH}/sys.conf"
+  local tmphostname=$(cat $sysconf | grep '^sys_hostname=')
+  local hostname=$(echo ${tmphostname#*=} | sed "s/^'//g" | sed "s/'$//g")
+  local len_hostname=${#hostname}
+  local tmpcutlevel=$(cat $sysconf | grep "^sys_cut=")
+  local cutlevel=$(echo ${tmpcutlevel#*=} | sed "s/^'//g" | sed "s/'$//g")
+  local tmpsysusrrpmcut=$(cat $sysconf | grep "^sys_usrrpm_cut=")
+  local sysusrrpmcut=$(echo ${tmpsysusrrpmcut#*=} | sed "s/^'//g" | sed "s/'$//g")
+  local tmpsysutc=$(cat $sysconf | grep "^sys_utc=")
+  local sysutc=$(echo ${tmpsysutc#*=} | sed "s/^'//g" | sed "s/'$//g")
+
+  if [ -z "$hostname" ]; then
+    echo "error: config hostname failed, the hostname is null, please check ${sysconf_path}"
+    return 1
+  fi
+
+  if [ $len_hostname -gt 63 ]; then
+    echo "error: config hostname failed. The length of hostname cannot exceed 63, please check ${sysconf_path}"
+    return 1
+  fi
+
+  if [ -z "$(echo $hostname | grep -E '^[a-z0-9A-Z]')" ]; then
+    echo "error: hostname must start with a character ('0-9' or 'A-Z' or 'a-z'), please check ${sysconf_path}"
+    return 1
+  fi
+
+  if [ -n "$(echo $hostname | grep -E '[^a-z0-9A-Z_-]')" ]; then
+    echo "error: hostname can only contain characters included by ('0-9' ,'a-z', 'A-Z', '-', '_'), please check ${sysconf_path}"
+    return 1
+  fi
+
+  echo ${AVAIL_CUT_LEVEL[*]} | grep -w "${cutlevel}" >/dev/null 2>&1
+  if [ $? -ne 0 ]; then
+    echo "error: sys_cut must be one of \"${AVAIL_CUT_LEVEL[*]}\", please check ${sysconf_path}"
+    return 1
+  fi
+
+  echo ${AVAIL_USRRPM_CUT_LEVEL[*]} | grep -w "${sysusrrpmcut}" >/dev/null 2>&1
+  if [ $? -ne 0 ]; then
+    echo "error: sys_usrrpm_cut must be one of \"${AVAIL_USRRPM_CUT_LEVEL[*]}\", please check ${sysconf_path}"
+    return 1
+  fi
+
+  echo ${AVAIL_SYS_UTC[*]} | grep -w "${sysutc}" >/dev/null 2>&1
+  if [ $? -ne 0 ]; then
+    echo "error: sys_utc must be one of ${AVAIL_SYS_UTC[*]}, please check ${sysconf_path}"
+    return 1
+  fi
+
+}
+
+#########################################################
+# 功能：初始化环境变量
+# 规则:
+# 1、修改$kiwiyml文件
+#########################################################
+function fn_init_product_var() {
+  local kiwiyml="kiwi/eulerkiwi/kiwi.yml"
+  local kiwirc_producttype="PRODUCT_TYPE:"
+  local kiwirc_systype="SYSTEMFLAG:"
+  local kiwirc_releasetype="RELEASE_TYPE:"
+  local kiwirc_bootloadertype="RELEASE_BOOTLOADER_TYPE:"
+  local kiwirc_iso_cmdline="RELEASE_ISO_CMDLINE:"
+  local productconf="$(grep -w "^$PRODUCT_NAME " $PRODUCT_CONF)"
+  local productcmdline=
+
+  cp -f $kiwiyml /etc/
+  kiwiyml="/etc/kiwi.yml"
+  if [ -z "$SYSTEM_TYPE" ]; then
+    PRODUCT_TYPE=$(echo $productconf | grep -v ^# | awk '{print $2}')
+    SYSTEM_TYPE=$(echo $productconf | grep -v ^# | awk '{print $3}')
+  fi
+
+  RELEASE_TYPE=$(echo $productconf | grep -v ^# | awk '{print $4}')
+  RELEASE_BOOTLOADER_TYPE=$(echo $productconf | grep -v ^# | awk '{print $5}')
+  echo ${AVAIL_BOOTLOADER_TYPE[*]} | grep -w "${RELEASE_BOOTLOADER_TYPE}" >/dev/null 2>&1
+  if [ $? -eq 0 ]; then
+    productcmdline=${productconf#*$RELEASE_BOOTLOADER_TYPE}
+    sed -i "s/^${kiwirc_bootloadertype}.*/${kiwirc_bootloadertype}\"${RELEASE_BOOTLOADER_TYPE}\"\;/" $kiwiyml
+    if [ $? -ne 0 ]; then
+      echo "error: modify kiwi bootloader type($kiwiyml) failed"
+      return 1
+    fi
+  else
+    productcmdline=${productconf#*$RELEASE_TYPE}
+    RELEASE_BOOTLOADER_TYPE=""
+  fi
+  RELEASE_ISO_CMDLINE=$(echo $productcmdline | sed 's#\/#\\\/#g')
+
+  if [ -z "$PRODUCT_TYPE" ]; then
+    echo "error: cannot find product type for $PRODUCT_NAME, please check $PRODUCT_CONF"
+    return 1
+  fi
+
+  sed -i "s/${kiwirc_producttype}.*/${kiwirc_producttype} \"${PRODUCT_TYPE}\"/" $kiwiyml
+  if [ $? -ne 0 ]; then
+    echo "error: modify kiwi product type($kiwiyml) failed"
+    return 1
+  fi
+
+  if [ -z "$SYSTEM_TYPE" ]; then
+    echo "error: cannot find sys type for $PRODUCT_NAME, please check $PRODUCT_CONF"
+    return 1
+  fi
+
+  sed -i "s/${kiwirc_systype}.*/${kiwirc_systype} \"${SYSTEM_TYPE}\"/" $kiwiyml
+  if [ $? -ne 0 ]; then
+    echo "error: modify kiwi system type($kiwiyml) failed"
+    return 1
+  fi
+
+  if [ -z "$RELEASE_TYPE" ]; then
+    echo "error: cannot find release type for $PRODUCT_NAME, please check $PRODUCT_CONF"
+    return 1
+  fi
+
+  sed -i "s/${kiwirc_releasetype}.*/${kiwirc_releasetype} \"${RELEASE_TYPE}\"/" $kiwiyml
+  if [ $? -ne 0 ]; then
+    echo "error: modify kiwi release type($kiwiyml) failed"
+    return 1
+  fi
+
+  if [ -n "$RELEASE_ISO_CMDLINE" ]; then
+    sed -i "s/${kiwirc_iso_cmdline}.*/${kiwirc_iso_cmdline} \"${RELEASE_ISO_CMDLINE}\"/" $kiwiyml
+    if [ $? -ne 0 ]; then
+      echo "error: modify kiwi iso cmdline($kiwiyml) failed"
+      return 1
+    fi
+  elif grep -q ${kiwirc_iso_cmdline} $kiwiyml; then
+    sed -i "/${kiwirc_iso_cmdline}.*/d" $kiwiyml
+    if [ $? -ne 0 ]; then
+      echo "error: modify kiwi iso cmdline($kiwiyml) failed"
+      return 1
+    fi
+  fi
+
+}
+
+#########################################################
+# create cfg table for Separatecfg
+# 功能：
+#########################################################
+
+function create_cfg_table() {
+  cat >${CFGTABLE_CONF} <<EOF
+HDpartitions        partition_              1   -
+sysconfig           ${SYS_CONFIG_NAME}      0   -
+netconfig           ifcfg-eth               1   -
+compile_env         compile_env.conf        0   -
+userinstallscript   userinstallscript.conf  0   -
+EOF
+
+  return 0
+}
+
+#########################################################
+# 功能：
+#########################################################
+
+function SeparateCfg() {
+  local conf=$1
+  local cfgtable=$2
+  local tempConf=
+  local ret=0
+  local key=
+  local value=
+  local isMulti=0
+  local handler=
+  local nodeCount=
+  local cid=
+  local callBackArr=
+
+  mkdir -p $USRCUSTOM_TMPCFG_PATH
+  if [ ! -f $conf ]; then
+    echo "error: config $conf is not exist."
+    return 1
+  fi
+
+  tempConf=${conf##*/}.new
+  # copy a new file
+  cp $conf $USRCUSTOM_TMPCFG_PATH/$tempConf
+
+  # delete line's first space
+  sed -i 's/^[ \t]*//g' $USRCUSTOM_TMPCFG_PATH/$tempConf
+
+  if [ ! -d $USRCUSTOM_TMPCFG_PATH ]; then
+    echo "error: USRCUSTOM_TMPCFG_PATH $USRCUSTOM_TMPCFG_PATH is not exist."
+    return 1
+  fi
+
+  cd $USRCUSTOM_TMPCFG_PATH >/dev/null 2>&1
+
+  local i=0
+  while read line; do
+    key=$(echo $line | awk '{print $1}')
+    value=$(echo $line | awk '{print $2}')
+    isMulti=$(echo $line | awk '{print $3}')
+    handler=$(echo $line | awk '{print $4}')
+
+    nodeCount="$(grep "<${key}.*>" $tempConf | wc -l)"
+    if [ $nodeCount -eq 0 ]; then
+      continue
+    fi
+
+    if [ $isMulti -eq 0 ]; then
+      sed -i "s/<${key}.*>/cat <<'EOF' >${value}/g" $tempConf
+      if [ $? -ne 0 ]; then
+        ret=1
+        continue
+      fi
+
+      sed -i "s/<\/${key}>/EOF/g" $tempConf
+      if [ $? -ne 0 ]; then
+        ret=1
+        continue
+      fi
+
+      if [ ! -z "$handler" ] && [ -z "$(echo $handler | grep '-')" ]; then
+        callBackArr[$i]="$handler"
+        ((i++))
+      fi
+
+    elif [ $isMulti -eq 1 ]; then
+      for config in $(grep "<${key}.*>" $tempConf); do
+        cid="$(echo $config | awk -F '>' '{print $1}' | awk -F '-' '{print $2}')"
+        if [ -z "$cid" ]; then
+          sed -i "s/<${key}.*>/cat <<'EOF' >${value}/g" $tempConf
+          if [ $? -ne 0 ]; then
+            ret=1
+            continue
+          fi
+
+          sed -i "s/<\/${key}>/EOF/g" $tempConf
+          if [ $? -ne 0 ]; then
+            ret=1
+            continue
+          fi
+
+          if [ ! -z "$handler" ] && [ -z "$(echo $handler | grep '-')" ]; then
+            callBackArr[$i]="$handler"
+            ((i++))
+          fi
+
+          continue
+        fi
+
+        sed -i "s/<${key}-${cid}>/cat <<'EOF' >${value}${cid}/g" $tempConf
+        if [ $? -ne 0 ]; then
+          ret=1
+          continue
+        fi
+
+        sed -i "s/<\/${key}-${cid}>/EOF/g" $tempConf
+        if [ $? -ne 0 ]; then
+          ret=1
+          continue
+        fi
+      done
+
+      if [ $ret -eq 1 ]; then
+        continue
+      fi
+
+      if [ ! -z "$handler" ] && [ -z "$(echo $handler | grep '-')" ]; then
+        callBackArr[$i]="$handler"
+        ((i++))
+      fi
+    fi
+  done <$cfgtable
+
+  # delete line's last space
+  sed -i 's/^EOF[ \t]*$/EOF/g' $tempConf
+  if [ $? -ne 0 ]; then
+    ret=1
+  fi
+
+  sh $tempConf
+  if [ $? -ne 0 ]; then
+    ret=1
+    echo "error: execute SeparateCfg failed"
+  fi
+
+  # call back
+  local fn_count=$i
+  ((fn_count--))
+  i=0
+  while true; do
+    if [ $i -gt $fn_count ]; then
+      break
+    else
+      eval "${callBackArr[$i]} $USRCUSTOM_TMPCFG_PATH"
+    fi
+    ((i++))
+  done
+
+  cd - >/dev/null 2>&1
+
+  return $ret
+}
+
+#########################################################
+# 功能：创建配置文件
+# 规则：
+#########################################################
+function fn_create_config() {
+  local eulerlinux_config="$USRCUSTOM_TMPCFG_PATH/${SYS_CONFIG_NAME}"
+  local net_conf="$USRCUSTOM_TMPCFG_PATH/ifcfg-eth"
+  local partition_conf="$USRCUSTOM_TMPCFG_PATH/partition"
+
+  create_cfg_table
+  SYSCONFIGFILE=$(basename $eulerlinux_config)
+
+  echo "SeparateCfg ..."
+  SeparateCfg ${SYS_CUSTOM_CONFIG} ${CFGTABLE_CONF}
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+
+  echo "check sysconf ..."
+  fn_check_sysconf $eulerlinux_config
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+
+  if [ "$SYSTEM_TYPE" = "SERVER" ]; then
+    KIWI_EULERLINUX_ISO="$MKISO_WORKSPACE/kiwi/eulerlinuxiso"
+    rm -rf $KIWI_EULERLINUX_ISO
+    mkdir -p $KIWI_EULERLINUX_ISO
+  fi
+  mkdir -p -m 700 $KIWI_EULERLINUX_IMAGE/root/usr/Euler
+  mkdir -p -m 700 $KIWI_EULERLINUX_ISO/root/usr/Euler
+  mkdir -p -m 700 $KIWI_EULERLINUX_IMAGE/root/usr/Euler/conf/
+  mkdir -p -m 700 $KIWI_EULERLINUX_ISO/root/usr/Euler/conf/
+
+  if [ -n "$(ls ${net_conf}* 2>/dev/null)" ]; then
+    mkdir -p $KIWI_EULERLINUX_IMAGE/root/etc/sysconfig/network-scripts
+    mkdir -p $KIWI_EULERLINUX_ISO/root/etc/sysconfig/network-scripts
+    cp -a ${net_conf}* $KIWI_EULERLINUX_IMAGE/root/etc/sysconfig/network-scripts
+    cp -a ${net_conf}* $KIWI_EULERLINUX_ISO/root/etc/sysconfig/network-scripts
+  fi
+
+  if [ -f "$eulerlinux_config" ]; then
+    chmod 600 "$eulerlinux_config"
+    mkdir -p $KIWI_EULERLINUX_IMAGE/root/etc $KIWI_EULERLINUX_ISO/root/etc/
+    cp -a $eulerlinux_config $KIWI_EULERLINUX_IMAGE/root/usr/Euler/conf/$SYS_CONFIG_NAME
+    cp -a $eulerlinux_config $KIWI_EULERLINUX_IMAGE/root/etc/$SYS_CONFIG_NAME
+    cp -a $eulerlinux_config $KIWI_EULERLINUX_ISO/root/usr/Euler/conf/$SYS_CONFIG_NAME
+    cp -a $eulerlinux_config $KIWI_EULERLINUX_ISO/root/etc/$SYS_CONFIG_NAME
+  fi
+
+  if [ -n "$(ls ${partition_conf}* 2>/dev/null)" ]; then
+    if [ -f "${partition_conf}_" ]; then
+      mv ${partition_conf}_ ${partition_conf}
+    fi
+    ls ${partition_conf}* | while read line; do
+      if [ -f "${line}" ]; then
+        mv ${line} ${line}.conf
+      fi
+    done
+
+    chmod 600 ${partition_conf}*
+    cp -a ${partition_conf}* $KIWI_EULERLINUX_IMAGE/root/usr/Euler/conf/
+    cp -a ${partition_conf}* $KIWI_EULERLINUX_ISO/root/usr/Euler/conf/
+
+  fi
+  COMPILE_CONF="$USRCUSTOM_TMPCFG_PATH/compile_env.conf"
+
+  return 0
+}
+
+#########################################################
+# 功能：解压编译环境，执行定制命令
+# 规则：
+#########################################################
+
+function compile_customtool() {
+  local compile_env=$1
+  local compile_conf=$2
+  local custom_usrfile=$3
+  local compile_workspace=$MKISO_WORKSPACE/compile_workspace_$$
+  local compile_env_dir=
+
+  rm -rf $compile_workspace
+  mkdir -p $compile_workspace
+
+  if [ $compile_env != 'LOCAL_ENV' ]; then
+    tar -xzf $compile_env -C $compile_workspace
+    if [ $? -ne 0 ]; then
+      echo "error: decompressing $compile_env failed"
+      return 1
+    fi
+
+    compile_env_dir=$(ls $compile_workspace)
+    if [ ! -d $compile_workspace/$compile_env_dir/ ]; then
+      echo "error: compile_env must be a directory, please check $compile_env"
+      return 1
+    fi
+
+    while read line; do
+      compile_src=$(echo $line | awk -F ':' '{print $1}')
+      compile_cmd=$(echo $line | awk -F ':' '{print $2}')
+      compile_dest=$(echo $line | awk -F ':' '{print $3}')
+
+      compile_src_dir=$(basename $compile_src)
+
+      cp -a $compile_src $compile_workspace/$compile_env_dir/
+
+      chroot $compile_workspace/$compile_env_dir/ <<EOF
+cd $compile_src_dir
+chmod +x $compile_cmd
+./$compile_cmd
+EOF
+
+      if [ $? -ne 0 ]; then
+        echo "error: execute $compile_cmd failed"
+        return 1
+      fi
+
+      cp -a $compile_workspace/$compile_env_dir/$compile_src_dir/$compile_dest/* $custom_usrfile
+    done <$compile_conf
+
+  else
+    while read line; do
+      compile_src=$(echo $line | awk -F ':' '{print $1}')
+      compile_cmd=$(echo $line | awk -F ':' '{print $2}')
+      compile_dest=$(echo $line | awk -F ':' '{print $3}')
+
+      cp -a $compile_src/* $compile_workspace/
+
+      pushd $compile_workspace >/dev/null
+      chmod +x $compile_cmd
+      ./$compile_cmd
+      if [ $? -ne 0 ]; then
+        echo "error: execute $compile_cmd failed"
+        popd >/dev/null
+        return 1
+      fi
+      popd >/dev/null
+      cp -a $compile_workspace/$compile_env_dir/$compile_src_dir/$compile_dest/* $custom_usrfile
+    done <$compile_conf
+
+  fi
+
+  rm -rf $compile_workspace
+  return 0
+}
+
+#########################################################
+# 功能：aarch64用
+#########################################################
+function fn_create_efiboot_image() {
+  local efibootimage_name="efibootimg"
+  local efibootimage_dir="efiboot_tmp"
+  local mkfs_fat=$(which mkfs.vfat)
+
+  pushd $KIWI_EL_RELEASE >/dev/null
+  [ -f $efibootimage_name ] && rm -rf $efibootimage_name
+  [ -d $efibootimage_dir ] && rm -rf $efibootimage_dir
+  dd if=/dev/zero of=$efibootimage_name bs=1M count=10
+  if [ $? -ne 0 ]; then
+    echo "error: create efibootimage for ${ISO_ARCH} failed"
+    popd >/dev/null
+    return 1
+  fi
+
+  $mkfs_fat $efibootimage_name
+  if [ $? -ne 0 ]; then
+    echo "error: mkfs_fat for efibootimage failed"
+    popd >/dev/null
+    return 1
+  fi
+
+  mkdir -p $efibootimage_dir
+  mount -o loop $efibootimage_name $efibootimage_dir
+  if [ $? -ne 0 ]; then
+    echo "error: mount for $efibootimage_name failed"
+    popd >/dev/null
+    return 1
+  fi
+
+  BOOT_dir=EFI/BOOT
+  shimfile=$(find $CURRENT_PATH -name shim-[0-9]*.aarch64.rpm | sort | head -1)
+
+  if [ -z $shimfile ]; then
+    echo "error: shim.rpm is not exist"
+    return 1
+  else
+    # create directory, tmp directory
+    mkdir -p ${BOOT_dir}
+    mkdir -p $efibootimage_dir/${BOOT_dir}
+
+    # copy files
+    tmp_shim_dir=EFI/tmp_shim
+    mkdir -p ${tmp_shim_dir}
+    pushd ${tmp_shim_dir}
+    rpm2cpio ${shimfile} | cpio -div
+    popd
+
+    cp ${tmp_shim_dir}/boot/efi/EFI/BOOT/* $efibootimage_dir/${BOOT_dir}
+    rm -f $efibootimage_dir/${BOOT_dir}/fbaa64.efi
+
+    cp ${tmp_shim_dir}/boot/efi/EFI/BOOT/* ${BOOT_dir}
+    rm -f ${BOOT_dir}/fbaa64.efi
+
+    rm -rf ${tmp_shim_dir}
+  fi
+
+  mkdir -p $efibootimage_dir/EFI/GRUB2
+  # grub.cfg
+  if [ -d ${BOOT_dir} ]; then
+    cp $CURRENT_PATH/$KIWI_EULERLINUX_GRUB2/EFI/GRUB2/grub.cfg $efibootimage_dir/${BOOT_dir}
+    cp $CURRENT_PATH/$KIWI_EULERLINUX_GRUB2/EFI/GRUB2/grub.cfg ${BOOT_dir}
+  fi
+
+  # grubaa64.efi
+  mkdir grub2_rpm_tmp
+  pushd grub2_rpm_tmp
+  find $CURRENT_PATH -name grub2-efi-aa64-[0-9]*.aarch64.rpm | grep -v storage | head -1 | xargs rpm2cpio | cpio -id
+  find $CURRENT_PATH -name shim-[0-9]*.aarch64.rpm | grep -v storage | head -1 | xargs rpm2cpio | cpio -id
+  popd
+
+  GRUBAA64_FILE=$(find ./grub2_rpm_tmp -name grubaa64.efi | head -1)
+  SHIMAA64_FILE=$(find ./grub2_rpm_tmp -name shimaa64.efi | head -1)
+  cp -a $GRUBAA64_FILE $efibootimage_dir/EFI/GRUB2
+  if [ -d ${BOOT_dir} ]; then
+    cp -a $GRUBAA64_FILE $efibootimage_dir/${BOOT_dir}
+    cp -a $GRUBAA64_FILE ${BOOT_dir}
+  fi
+
+  umount $efibootimage_dir
+  rm -rf $efibootimage_dir
+  mkdir -p EFI/GRUB2
+  cp $CURRENT_PATH/$KIWI_EULERLINUX_GRUB2/EFI/GRUB2/grub.cfg EFI/GRUB2/
+  if [ -d $CURRENT_PATH/$KIWI_EULERLINUX_GRUB2/for-pxe ]; then
+    cp -a $CURRENT_PATH/$KIWI_EULERLINUX_GRUB2/for-pxe .
+    cp -a $GRUBAA64_FILE for-pxe
+    cp -a $SHIMAA64_FILE for-pxe
+  fi
+  rm -rf grub2_rpm_tmp
+  popd >/dev/null
+
+}
+
+#########################################################
+# 功能：拷贝release
+#########################################################
+function fn_copy_elrelease() {
+  local l_userinstall=$1
+  local l_el_release_grub2conf="${KIWI_EL_RELEASE}/EFI/BOOT/grub.cfg"
+  local l_minios_boot="${KIWI_EL_RELEASE}/boot/"
+  local l_copyfile=
+  local l_partition_conf="$USRCUSTOM_TMPCFG_PATH/partition"
+
+  ## for KIWIImage.pm
+  if [ -d "$KIWI_EL_RELEASE" ]; then
+    rm -rf $KIWI_EL_RELEASE/*
+  else
+    mkdir -p $KIWI_EL_RELEASE
+  fi
+
+  if [ "GRUB2" = "$RELEASE_BOOTLOADER_TYPE" ]; then
+    if [ "${ISO_ARCH}" = "x86_64" ]; then
+      echo "get grub2 efi for x86_64 ..."
+      fn_get_grub2_efi
+      if [ $? -ne 0 ]; then
+        return 1
+      fi
+    fi
+
+    cp -a $KIWI_EULERLINUX_GRUB2/* $KIWI_EL_RELEASE >/dev/null 2>&1
+    if [ $? -ne 0 ]; then
+      echo "error: copy $KIWI_EULERLINUX_GRUB2 to $KIWI_EL_RELEASE failed"
+      return 1
+    fi
+
+    sed -i "s/KIWI_ISO_CMDLINE/${RELEASE_ISO_CMDLINE}/g" $l_el_release_grub2conf >/dev/null 2>&1
+    if [ $? -ne 0 ]; then
+      echo "error: modify $l_el_release_grub2conf iso_cmdline failed"
+      return 1
+    fi
+
+  fi
+
+  if [ ! -d "$l_userinstall" ] || [ -z "$(ls $l_userinstall)" ]; then
+    return 0
+  fi
+
+  # no copy bep_delete_hook
+  if [ -d $SYS_CUSTOM_USERHOOK/bep_delete_hook ]; then
+    mv $SYS_CUSTOM_USERHOOK/bep_delete_hook $l_userinstall/../
+    if [ $? -ne 0 ]; then
+      echo "error: mv $SYS_CUSTOM_USERHOOK/bep_delete_hook $l_userinstall/../ failed"
+      return 1
+    fi
+  fi
+
+  cp -a $l_userinstall/* $KIWI_EL_RELEASE >/dev/null 2>&1
+  if [ $? -ne 0 ]; then
+    echo "error: copy $l_userinstall to $KIWI_EL_RELEASE failed"
+    return 1
+  fi
+
+  # mv back bep_delete_hook to SYS_CUSTOM_USERHOOK/
+  if [ -d $l_userinstall/../bep_delete_hook ]; then
+    mv $l_userinstall/../bep_delete_hook $SYS_CUSTOM_USERHOOK/
+    if [ $? -ne 0 ]; then
+      echo "error: mv $l_userinstall/../bep_delete_hook $SYS_CUSTOM_USERHOOK/ failed"
+      return 1
+    fi
+  fi
+
+  rm -f $KIWI_EL_RELEASE/boot/boot.sha256 >/dev/null 2>&1
+  if [ "$MAKE_MINIOS_FLAG" = "yes" ] || [ "$MAKE_MINIOS_FLAG" = "force" ]; then
+    if [ ! -f "$l_minios_boot/initrd" ]; then
+      return 0
+    fi
+    mkdir -p $l_minios_boot/initrdbuild
+    pushd $l_minios_boot/initrdbuild >/dev/null
+    cat ../initrd | gunzip | cpio -i
+    if [ $? -ne 0 ]; then
+      echo "error: update minios failed"
+      popd >/dev/null
+      return 1
+    fi
+    popd >/dev/null
+    mkdir -p -m 700 $l_minios_boot/initrdbuild/usr/Euler/
+    mkdir -p -m 700 $l_minios_boot/initrdbuild/usr/Euler/hook $l_minios_boot/initrdbuild/usr/Euler/conf
+    # no copy bep_delete_hook
+    if [ -d $SYS_CUSTOM_USERHOOK/bep_delete_hook ]; then
+      mv $SYS_CUSTOM_USERHOOK/bep_delete_hook $SYS_CUSTOM_USERHOOK/../
+      if [ $? -ne 0 ]; then
+        echo "error: mv $SYS_CUSTOM_USERHOOK/bep_delete_hook $SYS_CUSTOM_USERHOOK/../ failed"
+        return 1
+      fi
+    fi
+
+    cp -ap $SYS_CUSTOM_USERHOOK/* $l_minios_boot/initrdbuild/usr/Euler/hook >/dev/null 2>&1
+    chmod 700 $l_minios_boot/initrdbuild/usr/Euler/hook/*
+    # mv back bep_delete_hook to SYS_CUSTOM_USERHOOK/
+    if [ -d $SYS_CUSTOM_USERHOOK/../bep_delete_hook ]; then
+      mv $SYS_CUSTOM_USERHOOK/../bep_delete_hook $SYS_CUSTOM_USERHOOK/
+      if [ $? -ne 0 ]; then
+        echo "error: mv $SYS_CUSTOM_USERHOOK/../bep_delete_hook $SYS_CUSTOM_USERHOOK/ failed"
+        return 1
+      fi
+    fi
+
+    cp -ap $SYS_CUSTOM_USERCONF/* $l_minios_boot/initrdbuild/usr/Euler/conf >/dev/null 2>&1
+    if [ -n "$(ls ${l_partition_conf}* 2>/dev/null)" ]; then
+      cp -a ${l_partition_conf}* $l_minios_boot/initrdbuild/usr/Euler/conf
+      if [ $? -ne 0 ]; then
+        echo "error: cp -a ${l_partition_conf}* $l_minios_boot/initrdbuild/usr/Euler/conf failed"
+        return 1
+      fi
+    fi
+
+    if [ -f $l_minios_boot/initrdbuild/usr/Euler/conf/grub.cfg ]; then
+      chmod 600 $l_minios_boot/initrdbuild/usr/Euler/conf/grub.cfg
+    fi
+    pushd $l_minios_boot/initrdbuild >/dev/null
+    find . | cpio -H newc --create --quiet | pigz -9 >../initrd
+    if [ $? -ne 0 ]; then
+      echo "error: update minios failed"
+      popd >/dev/null
+      rm -rf $l_minios_boot/initrdbuild
+      return 1
+    fi
+    popd >/dev/null
+    rm -rf $l_minios_boot/initrdbuild
+
+  elif [ "$MAKE_MINIOS_FLAG" = "no" ]; then
+    rm -rf $KIWI_EL_RELEASE/TRANS.TBL
+    rm -rf $KIWI_EL_RELEASE/boot.sha256
+    rm -rf $KIWI_EL_RELEASE/initrd
+    rm -rf $KIWI_EL_RELEASE/linux
+  fi
+
+  return 0
+
+}
+
+#########################################################
+# 功能：kiwi初始化
+# 规则：
+# 1、删除缓存repos
+# 2、删除kiwi-init文件锁
+# 3、拷贝security_s.conf文件
+# 4、创建MKISO_LOG日志目录
+# 5、校验kiwi-dlimage包存在
+# 6、初始化产品信息和配置
+# 7、准备用户编译环境
+# 8、拷贝release
+# 9、根据$SYSTEM_TYPE修改配置文件
+#########################################################
+function fn_kiwi_init() {
+  local sys_custom_conf_path=$1
+  local kiwi_lock="/var/lock/kiwi-init.lock"
+  local kiwi_cache_zypper="/var/cache/kiwi/zypper/repos"
+  local kiwi_cache_repo=
+
+  fn_do_clean 1
+
+  SYS_CUSTOM_STRIPTOOLS="$sys_custom_conf_path/cmd.conf"
+  SYS_CUSTOM_XML="$sys_custom_conf_path/rpm.conf"
+  SYS_CUSTOM_CONFIG="$sys_custom_conf_path/sys.conf"
+  SYS_CUSTOM_USERRPM="$sys_custom_conf_path/usr_rpm/"
+  SYS_CUSTOM_USERFILE="$sys_custom_conf_path/usr_file/"
+  SYS_CUSTOM_USERINSTALL="$sys_custom_conf_path/usr_install/"
+  SYS_CUSTOM_USERHOOK="$SYS_CUSTOM_USERINSTALL/hook"
+  SYS_CUSTOM_USERCONF="$SYS_CUSTOM_USERINSTALL/conf"
+
+  if [ -f "${SYS_CUSTOM_USERINSTALL/conf/grub.cfg}" ]; then
+    chmod 640 $SYS_CUSTOM_USERINSTALL/conf/grub.cfg
+  fi
+  if [ -f "${SYS_CUSTOM_USERINSTALL/conf/grub_jump.cfg}" ]; then
+    chmod 640 $SYS_CUSTOM_USERINSTALL/conf/grub_jump.cfg
+  fi
+
+  kiwi_cache_repo=$(find $kiwi_cache_zypper -name *.repo 2>/dev/null)
+  if [ -n "$kiwi_cache_repo" ]; then
+    rm -rf /var/cache/kiwi/zypper/repos/*
+    if [ $? -ne 0 ]; then
+      echo "error: remove /var/cache/kiwi/zypper/repos/* failed, please check it!"
+      return 1
+    fi
+  fi
+
+  if [ -f "$kiwi_lock" ]; then
+    rm -rf $kiwi_lock
+    if [ $? -ne 0 ]; then
+      echo "error: remove $kiwi_lock failed, please check it"
+      return 1
+    fi
+  fi
+
+  if [ "$SEC_HARDEN" == "1" ] && [ "$MINIOS_MAKE_FLAG" = "FALSE" ]; then
+    if [ -e "$sys_custom_conf_path/security_s.conf" ]; then
+      cp -a "$sys_custom_conf_path/security_s.conf" "$KIWI_EULERLINUX_ISO/security_s.conf"
+    else
+      echo "error: the security configuration file does not exist."
+      exit 1
+    fi
+  fi
+
+  if [ ! -d $MKISO_LOG ]; then
+    rm -rf $MKISO_LOG
+    mkdir -p $MKISO_LOG
+    if [ $? -ne 0 ]; then
+      echo "error: mkdir $MKISO_LOG failed, please check it!"
+      return 1
+    fi
+  fi
+  mkdir -p $MKISO_WORKSPACE
+  mkdir -p $MKISO_TMPLOG_WORKSPACE
+  mkdir -p $MKISO_RESULT
+
+  if [ -d $KIWI_EULERLINUX_IMAGE ]; then
+    rm -rf $KIWI_EULERLINUX_IMAGE
+  fi
+
+  cp -ap $KIWI_EULERLINUX_DOPRA_IMAGE $KIWI_EULERLINUX_IMAGE
+  if [ $? -ne 0 ]; then
+    echo "error: Package kiwi-dlimage not installed"
+    return 1
+  fi
+
+  echo "init product var ..."
+  fn_init_product_var
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+
+  echo "create_config ..."
+  fn_create_config
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+
+  if [ ! -z $COMPILE_ENV ] && [ -f $COMPILE_CONF ]; then
+    echo "compile customtool ..."
+    compile_customtool $COMPILE_ENV $COMPILE_CONF $SYS_CUSTOM_USERFILE
+    if [ $? -ne 0 ]; then
+      return 1
+    fi
+  elif [ ! -z $COMPILE_ENV ] && [ ! -f $COMPILE_CONF ]; then
+    echo "$COMPILE_CONF is not produced, please check sys.conf file"
+  fi
+
+  echo "copy elrelease ..."
+  fn_copy_elrelease $SYS_CUSTOM_USERINSTALL
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+
+  if [ "${ISO_ARCH}" = "aarch64" ]; then
+    fn_create_efiboot_image
+    if [ $? -ne 0 ]; then
+      return 1
+    fi
+  fi
+
+  if [ "$SYSTEM_TYPE" = "SERVER" ]; then
+    SYS_CUSTOM_STRIPTOOLS="kiwi/eulerlinuximage/KIWIConfig.xml"
+  fi
+  if [ -f $SYS_CUSTOM_STRIPTOOLS ]; then
+    cp -a $SYS_CUSTOM_STRIPTOOLS $KIWI_STRIP_XML
+    if [ $? -ne 0 ]; then
+      echo "error: copy $SYS_CUSTOM_STRIPTOOLS to $KIWI_STRIP_XML failed"
+      return 1
+    fi
+  else
+    echo "error: SYS_CUSTOM_STRIPTOOLS: No such file or directory"
+    return 1
+  fi
+
+  if [ "$SYSTEM_TYPE" = "EMBEDDED" ]; then
+    if [ -f $SYS_CUSTOM_XML ]; then
+      cp -a $SYS_CUSTOM_XML $KIWI_EULERLINUX_IMAGE/config.xml
+      if [ $? -ne 0 ]; then
+        echo "error: copy $SYS_CUSTOM_XML to $KIWI_EULERLINUX_IMAGE/config.xml failed"
+        return 1
+      fi
+
+      if [ "$SEC_HARDEN" != "1" ] && [ "$MINIOS_MAKE_FLAG" = "FALSE" ]; then
+        sed -i '/sysenhance/d' $KIWI_EULERLINUX_IMAGE/config.xml >/dev/null 2>&1
+        if [ $? -ne 0 ]; then
+          echo "error: Delete security sysenhance package failed"
+          return 1
+        fi
+
+        sed -i '/sysenhance_common/d' $KIWI_EULERLINUX_IMAGE/config.xml >/dev/null 2>&1
+        if [ $? -ne 0 ]; then
+          echo "error: Delete security sysenhance_rse package failed"
+          return 1
+        fi
+      fi
+    else
+      echo "error: SYS_CUSTOM_XML: No such file or directory"
+      return 1
+    fi
+
+    mkdir -p $KIWI_EULERLINUX_IMAGE/root/usr/custom/rpm $KIWI_EULERLINUX_IMAGE/root/usr/custom/usrfile
+    cp -a $SYS_CUSTOM_USERRPM/* $KIWI_EULERLINUX_IMAGE/root/usr/custom/rpm >/dev/null 2>&1
+
+    cp -a $SYS_CUSTOM_USERFILE/* $KIWI_EULERLINUX_IMAGE/root/usr/custom/usrfile >/dev/null 2>&1
+    mkdir -p $KIWI_EULERLINUX_IMAGE/root/dev
+    if [ ! -e $KIWI_EULERLINUX_IMAGE/root/dev/console ]; then
+      mknod -m 0600 $KIWI_EULERLINUX_IMAGE/root/dev/console c 5 1
+    fi
+
+  else
+    # other use it
+    rm -rf $KIWI_EULERLINUX_IMAGE
+    mkdir -p $KIWI_EULERLINUX_IMAGE
+    cp -a kiwi/eulerlinuximage/* $KIWI_EULERLINUX_IMAGE >/dev/null 2>&1
+
+    KIWI_EULERLINUX_ISO="$MKISO_WORKSPACE/kiwi/eulerlinuxiso"
+    rm -rf $KIWI_EULERLINUX_ISO
+    mkdir -p $KIWI_EULERLINUX_ISO
+    cp -a kiwi/eulerlinuxiso/* $KIWI_EULERLINUX_ISO
+
+    if [ -f $SYS_CUSTOM_XML ]; then
+      cp -a $SYS_CUSTOM_XML $KIWI_EULERLINUX_ISO/config.xml.form
+      if [ $? -ne 0 ]; then
+        echo "error: copy $SYS_CUSTOM_XML to $KIWI_EULERLINUX_ISO/config.xml failed"
+        return 1
+      fi
+    else
+      echo "error: SYS_CUSTOM_XML :No such file or directory"
+      return 1
+    fi
+
+    if [ -d $KIWI_EULERLINUX_ISO ]; then
+      mkdir -p $KIWI_EULERLINUX_ISO/root/usr/custom/rpm $KIWI_EULERLINUX_ISO/root/usr/custom/usrfile
+      cp -a $SYS_CUSTOM_USERRPM/* $KIWI_EULERLINUX_ISO/root/usr/custom/rpm >/dev/null 2>&1
+
+      mkdir -p $KIWI_EULERLINUX_ISO/root/usr/Euler/conf
+      mkdir -p $KIWI_EULERLINUX_ISO/root/usr/Euler/hook
+      cp -a $SYS_CUSTOM_USERHOOK/* $KIWI_EULERLINUX_ISO/root/usr/Euler/hook >/dev/null 2>&1
+      cp -a $SYS_CUSTOM_USERCONF/* $KIWI_EULERLINUX_ISO/root/usr/Euler/conf >/dev/null 2>&1
+
+      cp -a $SYS_CUSTOM_USERFILE/* $KIWI_EULERLINUX_ISO/root/ >/dev/null 2>&1
+
+    fi
+
+  fi
+
+  # usrfile has a higher priority than sys.conf
+  # usrinstall has a higher priority than usrfile
+  mkdir -m 700 -p $KIWI_EULERLINUX_IMAGE/root/usr/custom/usrfile/usr/Euler
+  mkdir -m 700 -p $KIWI_EULERLINUX_IMAGE/root/usr/custom/usrfile/usr/Euler/conf
+  mkdir -m 700 -p $KIWI_EULERLINUX_IMAGE/root/usr/custom/usrfile/usr/Euler/hook
+
+  if [ -d "$SYS_CUSTOM_USERHOOK" ]; then
+    cp -a $SYS_CUSTOM_USERHOOK/* $KIWI_EULERLINUX_IMAGE/root/usr/custom/usrfile/usr/Euler/hook >/dev/null 2>&1
+    chmod 700 $KIWI_EULERLINUX_IMAGE/root/usr/custom/usrfile/usr/Euler/hook/*
+  fi
+  if [ -d "$SYS_CUSTOM_USERCONF" ]; then
+    cp -a $SYS_CUSTOM_USERCONF/* $KIWI_EULERLINUX_IMAGE/root/usr/custom/usrfile/usr/Euler/conf >/dev/null 2>&1
+  fi
+
+  if [ -f "$SYS_CUSTOM_USERCONF/isopackage.sdf" ]; then
+    mkdir -p $KIWI_EULERLINUX_IMAGE/root/etc
+    cp -a $SYS_CUSTOM_USERCONF/isopackage.sdf $KIWI_EULERLINUX_IMAGE/root/etc/$SYS_CONFIG_NAME
+  elif [ -n "$(echo $SYS_CUSTOM_USERINSTALL | egrep "ui|fsb")" ]; then
+    mkdir -p $KIWI_EULERLINUX_IMAGE/root/etc
+    cp -a $SYS_CUSTOM_USERINSTALL/all/cfg/isopackage.sdf $KIWI_EULERLINUX_IMAGE/root/etc/$SYS_CONFIG_NAME
+  fi
+
+}
+
+#########################################################
+# 功能：修改repo
+#########################################################
+
+function fn_modify_repository() {
+  local repository_conf=$KIWI_EULERLINUX_ISO/config.xml
+  local repository_conf_form=$KIWI_EULERLINUX_ISO/config.xml.form
+  local repository_name=
+  local repository_priority=
+  local repository_type=
+  local repository_path=
+  local repository_rule_conf="repos/RepositoryRule.conf"
+
+  local product_repository=$MKISO_WORKSPACE/repository_rule_conf_$$
+  local product_repository_forxml=$MKISO_WORKSPACE/product_repository_forxml_$$
+
+  if [ ! -f ${repository_conf_form} ]; then
+    echo "error: ${repository_conf_form} :No such file, please check it"
+    return 1
+  fi
+
+  grep -w "^${PRODUCT_NAME} " $repository_rule_conf >$product_repository
+  if [ -z "$(cat $product_repository)" ]; then
+    echo "error: no rpm repository for ${PRODUCT_NAME}, please check $repository_rule_conf"
+    rm -rf $product_repository
+    return 1
+  fi
+  : >$product_repository_forxml
+
+  while read line; do
+    repository_name=$(echo $line | awk '{print $1}')
+    repository_priority=$(echo $line | awk '{print $2}')
+    repository_type=$(echo $line | awk '{print $3}')
+    repository_path=$(echo $line | awk '{print $4}')
+
+    if [ "${repository_name}" != "${PRODUCT_NAME}" ]; then
+      continue
+    fi
+    if [ -z "$(echo "${repository_priority}" | grep -w "^[1-9][0-9]\{0,1\}$")" ]; then
+      echo "the repository priority is inavail in \"${line}\", will ignore this repository"
+      continue
+    fi
+
+    echo ${AVAIL_REPOSITORY_TYPE[*]} | grep -w "${repository_type}" >/dev/null 2>&1
+    if [ $? -ne 0 ]; then
+      echo "the repository type is inavail in \"${line}\", will ignore this repository"
+      continue
+    fi
+
+    if [ ! -d ${CURRENT_PATH}/repos/${repository_path} ]; then
+      echo "the repository path is inavail in \"${line}\",${CURRENT_PATH}/repos/${repository_path} is not directory, will ignore this repository"
+      continue
+    fi
+
+    cat >>${product_repository_forxml} <<EOF
+     <repository type="${repository_type}" priority="${repository_priority}" >
+        <source path="file://${CURRENT_PATH}/repos/${repository_path}"/>
+     </repository>
+EOF
+
+  done <$product_repository
+
+  if [ -z "$(cat ${product_repository_forxml})" ]; then
+    echo "error: no rpm repository for ${PRODUCT_NAME}, please check it"
+    rm -rf $product_repository
+    rm -rf $product_repository_forxml
+    return 1
+  fi
+
+  sed -n '1,/EULERLINUX_RPM_REPOSITORY/p' ${repository_conf_form} >$repository_conf
+  cat ${product_repository_forxml} >>$repository_conf
+  sed -n '/EULERLINUX_RPM_REPOSITORY/,$p' ${repository_conf_form} >>$repository_conf
+  sed -i '/EULERLINUX_RPM_REPOSITORY/'d $repository_conf
+
+  return 0
+
+}
+
+#########################################################
+# call kiwi to make iso
+#########################################################
+
+function fn_do_kiwi() {
+  local l_minios_boot=$1
+  rm -rf $MYISO
+  local euleriso=/$CURRENT_PATH/$KIWI_EULERLINUX_ISO
+  if [ "$SYSTEM_TYPE" = "SERVER" ]; then
+    euleriso=$KIWI_EULERLINUX_ISO
+  fi
+
+  rm -rf ${MYISO_RESULT}
+  mkdir -p ${MYISO_RESULT}
+  echo "kiwicompat --build $euleriso -d ${MYISO_RESULT} --type pxe"
+  kiwicompat --build $euleriso -d ${MYISO_RESULT} --type pxe
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+
+  if [ "$RELEASE_TYPE" = "TAR" ]; then
+    release_dir="${MKISO_RESULT}/$(date +%Y-%m-%d-%H-%M)"
+    mkdir -p ${release_dir}
+
+    if [ "${PRODUCT_TYPE}" = "PANGEA" ]; then
+      make_os_release_for_tar
+    else
+      #for DPROJ
+      make_os_release_for_dproj
+    fi
+
+    cp ${MYISO_RESULT}/$RELEASE_TAR_NAME ${release_dir}
+    cd ${release_dir}
+    sha256sum $RELEASE_TAR_NAME >$RELEASE_TAR_SHA256
+    echo "Complete release tar file at: ${release_dir}/$RELEASE_TAR_NAME"
+    cd - >/dev/null 2>&1
+
+  else
+    echo ${AVAIL_PRODUCT_MEM_NAME[*]} | grep -w "${PRODUCT_NAME}" >/dev/null 2>&1
+    if [ $? -eq 0 ]; then
+      release_dir="${MKISO_RESULT}/$(date +%Y-%m-%d-%H-%M)"
+      tmp_iso_dir="${MKISO_RESULT}/tmpiso"
+      rm -rf $tmp_iso_dir
+
+      mkdir -p ${release_dir}
+      mkdir -p ${tmp_iso_dir}
+      mkdir -p ${MYISO_RESULT}/minios
+      mount -o loop ${MYISO_RESULT}/eulerlinux.*.iso ${MYISO_RESULT}/minios >/dev/null 2>&1
+      if [ $? -ne 0 ]; then
+        echo "error: mount $ISO_NAME failed"
+        umount ${MYISO_RESULT}/minios
+        return 1
+      fi
+      cp -a ${MYISO_RESULT}/minios/* ${tmp_iso_dir}
+      umount ${MYISO_RESULT}/minios
+
+      rm -rf ${tmp_iso_dir}/repo/*
+      cp -a ${tmp_iso_dir}/boot/initrd ${tmp_iso_dir}/repo/
+      cp -a ${tmp_iso_dir}/boot/linux ${tmp_iso_dir}/repo/
+
+      pushd ${tmp_iso_dir}/repo >/dev/null
+      tar -zcf OS.tar.gz * --remove-files
+      if [ $? -ne 0 ]; then
+        echo "error: Compress package failed"
+        popd >/dev/null
+        return 1
+      fi
+      sha256sum OS.tar.gz >OS.tar.gz.sha256
+      if [ $? -ne 0 ]; then
+        echo "error: Generate sha256 checksum failed"
+        popd >/dev/null
+        return 1
+      fi
+
+      chmod 555 OS.tar.gz
+      chmod 555 OS.tar.gz.sha256
+      popd >/dev/null
+
+      #create new iso
+      genisoimage -R -J -T -r -l -d -input-charset "utf-8" -allow-multidot \
+        -allow-leading-dots -no-bak -o ${release_dir}/$ISO_NAME -b isolinux/isolinux.bin \
+        -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table \
+        ${tmp_iso_dir} >/dev/null 2>&1
+      rm -rf ${tmp_iso_dir}
+      cd ${release_dir}
+      sha256sum $ISO_NAME >${ISO_NAME}.sha256
+      echo "Complete release iso file at: ${release_dir}/$ISO_NAME"
+      cd - >/dev/null 2>&1
+
+    else
+      if [ -z "$l_minios_boot" ]; then
+        release_dir="${MKISO_RESULT}/$(date +%Y-%m-%d-%H-%M)"
+        mkdir -p ${release_dir}
+
+        make_iso_boot_file
+        if [ $? -ne 0 ]; then return 1; fi
+
+        make_iso_server
+        if [ $? -ne 0 ]; then return 1; fi
+
+        cp ${MYISO_RESULT}/eulerlinux.*.iso ${release_dir}/$ISO_NAME
+        cd ${release_dir}
+        sha256sum $ISO_NAME >${ISO_NAME}.sha256
+        echo "Complete release iso file at: ${release_dir}/$ISO_NAME"
+        cd - >/dev/null 2>&1
+
+      else
+        mv ${MYISO_RESULT}/build/image-root.log /tmp/minios_$$.log >/dev/null 2>&1
+        if [ ! -d "$l_minios_boot" ]; then
+          mkdir -p $l_minios_boot
+        fi
+        rm -rf $l_minios_boot/*
+        initrd_file=$(ls ${MYISO_RESULT} | grep initrd$)
+        linux_file=$(ls ${MYISO_RESULT} | grep kernel$)
+        cp ${MYISO_RESULT}/$initrd_file $l_minios_boot/initrd
+        if [ $? -ne 0 ]; then
+          echo "error: copy initrd to $l_minios_boot failed"
+          return 1
+        fi
+
+        cp ${MYISO_RESULT}/$linux_file $l_minios_boot/linux
+        if [ $? -ne 0 ]; then
+          echo "error: copy linux to  $l_minios_boot failed"
+          return 1
+        fi
+
+        pushd ${KIWI_MINIOS}
+        find cfg_minios/ -type f >cfg_minios/${MINIOS_FILELIST}
+        find cfg_minios/ -type f -print0 | xargs -0 sha256sum >${MINIOS_SHA256}
+        popd >/dev/null
+
+        pushd $l_minios_boot >/dev/null
+        sha256sum * >$MINIOS_BOOT_SHA256
+        popd >/dev/null
+
+      fi
+    fi
+  fi
+  return 0
+}
+
+#########################################################
+# 功能：制作ISO
+# 规则：
+# 1、初始化kiwi环境
+# 2、修改repo
+# 3、执行kiwi
+#########################################################
+function fn_make_iso() {
+  local sys_custom_conf_path=$1
+  local l_minios_boot=$2
+
+  echo "kiwi init ..."
+  fn_kiwi_init $sys_custom_conf_path
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+
+  echo "modify repository ..."
+  fn_modify_repository
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+
+  echo "do kiwi ..."
+  fn_do_kiwi $l_minios_boot
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+
+}
+
+#########################################################
+# 功能：制作minios
+# 规则：
+# 1、MINIOS_MAKE_FLAG为TRUE表示正在制作minios
+#########################################################
+function fn_make_minios() {
+  local l_minios_boot=$SYS_CUSTOM_CONF_PATH/usr_install/boot
+  echo "begin to make minios ..."
+  MINIOS_MAKE_FLAG="TRUE"
+
+  fn_make_iso $MINIOS_CUSTOM_CONF_PATH $l_minios_boot
+  if [ $? -ne 0 ]; then
+    echo "error: make minios failed"
+    return 1
+  fi
+
+  MINIOS_MAKE_FLAG="FALSE"
+  echo "end to make minios"
+
+  return 0
+
+}
+
+#########################################################
+# make minios
+#########################################################
+
+function fn_make_minios_yes() {
+  if [ -d "$MINIOS_BOOT" ]; then
+    pushd "$MINIOS_BOOT" >/dev/null
+    sha256sum -c $MINIOS_BOOT_SHA256 >/dev/null
+    if [ $? -eq 0 ]; then
+      echo "check minios sha256 ok"
+      popd >/dev/null
+      return 0
+    else
+      echo "check minios sha256 failed, it will remake minios."
+    fi
+    popd >/dev/null
+  fi
+
+  fn_make_minios
+  if [ $? -ne 0 ]; then
+    echo "error: make minios failed, please check it."
+    return 1
+  fi
+
+}
+
+#########################################################
+# 功能：制作minios
+# 规则：
+# 1、$MINIOS_KIWI_CONF不存在时，默认不支持制作minios
+# 2、如果未传入，则默认取$MINIOS_KIWI_CONF中的minios标志
+# 3、force时强制重做minios，yes时会比较MD5后按需制作minios
+#########################################################
+
+function fn_minios() {
+  local miniosconf=
+  miniosconf=$(grep -w "^$PRODUCT_NAME " $MINIOS_KIWI_CONF | grep -v ^#)
+  if [ -z "$miniosconf" ]; then
+    if [ -n "$MAKE_MINIOS_FLAG" ]; then
+      echo "error: $PRODUCT_NAME does not support to make minios, please check param --minios"
+      return 1
+    else
+      echo "info: $PRODUCT_NAME does not config in $MINIOS_KIWI_CONF yet"
+      return 0
+    fi
+  fi
+
+  MINIOS_CUSTOM_CONF_PATH=$(echo $miniosconf | grep -v ^# | awk '{print $2}')
+
+  if [ -z "$MAKE_MINIOS_FLAG" ]; then
+    MAKE_MINIOS_FLAG=$(echo $miniosconf | grep -v ^# | awk '{print $3}')
+  fi
+
+  echo "MAKE_MINIOS_FLAG is ${MAKE_MINIOS_FLAG}"
+  if [ "$MAKE_MINIOS_FLAG" = "force" ]; then
+    fn_make_minios
+    if [ $? -ne 0 ]; then
+      return 1
+    fi
+  elif [ "$MAKE_MINIOS_FLAG" = "yes" ]; then
+    fn_make_minios_yes
+    if [ $? -ne 0 ]; then
+      return 1
+    fi
+  fi
+
+  return 0
+}
+
+#########################################################
+# 功能：安装repo
+# 规则：
+# 1、rpm列表目录下需包含 createrepo_c-版本号.rpm 文件
+# 2、安装createrepo成功后，依次安装rpm目录
+#########################################################
+
+function fn_createrepo {
+  local repo_name=''
+  which createrepo >/dev/null 2>&1
+  if [ $? -ne 0 ]; then
+    create_rpm=$(find ./repos -name "createrepo_c-[0-9]*rpm")
+    if [ -z $create_rpm ]; then
+      echo "error: not find createrepo, please install createrepo"
+      return 1
+    else
+      rpm -Uvh --force $create_rpm
+      if [ $? -ne 0 ]; then
+        echo "error: install createrepo failed"
+        return 1
+      fi
+    fi
+  fi
+
+  for repo_name in $CURRENT_PATH/repos/*; do
+    if [ -d "$repo_name" ]; then
+      createrepo $repo_name &>/dev/null
+      if [ $? -ne 0 ]; then
+        echo "error: createrepo $repo_name failed"
+        return 1
+      fi
+    fi
+  done
+}
+
+#########################################################
+# get grubx86.efi from grub2-efi.rpm
+#########################################################
+
+function fn_get_grub2_efi() {
+  local ret=
+  local tmpdir=
+  local efibootimage_name="efi"
+  local efibootimage_dir="efi_tmp"
+  local mkfs_fat="$(which mkfs.vfat)"
+
+  local grub2_efi_file=
+  if [ ! -f $KIWI_EULERLINUX_GRUB2/EFI/BOOT/grubx64.efi ]; then
+    tmpdir=$(mktemp -d -p ./)
+    pushd $tmpdir
+    find $CURRENT_PATH -name grub2-efi-x64-[0-9]*.x86_64.rpm | xargs rpm2cpio | cpio -id
+    popd
+    grub2_efi_file=$(find $tmpdir -name grubx64.efi)
+    cp $grub2_efi_file $KIWI_EULERLINUX_GRUB2/EFI/BOOT/
+    if [ $? -ne 0 ]; then
+      echo "error: cp $grub2_efi_file to $KIWI_EULERLINUX_GRUB2/EFI/BOOT/ failed"
+      return 1
+    fi
+    rm -rf $tmpdir
+  fi
+
+  if [ ! -f $KIWI_EULERLINUX_GRUB2/boot/x86_64/efi ]; then
+    mkdir -p $KIWI_EULERLINUX_GRUB2/boot/x86_64/
+    tmpdir=$(mktemp -d -p ./)
+    pushd $tmpdir
+    find $CURRENT_PATH -name shim-[0-9]*.x86_64.rpm | xargs rpm2cpio | cpio -id
+    dd if=/dev/zero of=$efibootimage_name bs=1M count=10
+    if [ $? -ne 0 ]; then
+      echo "error: create efibootimage failed"
+      popd >/dev/null
+      rm -rf $tmpdir
+      return 1
+    fi
+
+    mkdir $efibootimage_dir
+    $mkfs_fat $efibootimage_name
+    if [ $? -ne 0 ]; then
+      echo "error: mkfs.fat efibootimage failed"
+      popd >/dev/null
+      rm -rf $tmpdir
+      return 1
+    fi
+
+    mount -o loop $efibootimage_name $efibootimage_dir
+    if [ $? -ne 0 ]; then
+      echo "error: mount $efibootimage_name to $efibootimage_dir failed"
+      popd >/dev/null
+      rm -rf $tmpdir
+      return 1
+    fi
+
+    BOOT_dir=EFI/BOOT
+    mkdir -p $efibootimage_dir/$BOOT_dir
+    cp boot/efi/EFI/BOOT/BOOTX64.EFI $efibootimage_dir/$BOOT_dir
+    if [ $? -ne 0 ]; then
+      echo "error: cp BOOTX64.EFI to $efibootimage_dir/$BOOT_dir failed"
+      popd >/dev/null
+      rm -rf $tmpdir
+      return 1
+    fi
+
+    cp $CURRENT_PATH/$KIWI_EULERLINUX_GRUB2/EFI/BOOT/* $efibootimage_dir/$BOOT_dir
+    umount $efibootimage_dir
+    if [ $? -ne 0 ]; then
+      echo "error: umount $efibootimage_dir failed"
+      popd >/dev/null
+      rm -rf $tmpdir
+      return 1
+    fi
+
+    cp $efibootimage_name $CURRENT_PATH/$KIWI_EULERLINUX_GRUB2/boot/x86_64/
+    ret=$?
+    popd
+    rm -rf $tmpdir
+    return $ret
+  fi
+
+}
+
+#########################################################
+# 功能：为openEuler定制的配置修改
+# 规则：
+# 1、关闭防火墙
+# 2、拷贝kiwi-dlimage的config.sh images.sh
+# 3、拷贝dliso-config的splash.jpg
+# 4、修改isopackage.sdf
+#########################################################
+function fn_init_for_openEuler() {
+  echo "fn_init_for_openEuler start ..."
+  setenforce 0
+
+  # copy kiwi-dlimage
+  rm -rf ${KIWI_EULERLINUX_DOPRA_IMAGE}
+  mkdir -p ${KIWI_EULERLINUX_DOPRA_IMAGE}
+  cp ${CURRENT_PATH}/kiwi/hook/* ${KIWI_EULERLINUX_DOPRA_IMAGE}/
+  if [ $? -ne 0 ]; then
+    echo "error: copy kiwi/hook/* failed"
+    return 1
+  fi
+
+  # copy splash.jpg
+  local eulerlinuxpath="/usr/share/kiwi/config"
+  mkdir -p ${eulerlinuxpath}
+  cp ${CURRENT_PATH}/kiwi/startup_splash/splash.jpg ${eulerlinuxpath}/
+  if [ $? -ne 0 ]; then
+    echo "error: copy dliso-config failed"
+    return 1
+  fi
+
+  # modify isopackage.sdf
+  isopackage_path="${SYS_CUSTOM_CONF_PATH}/usr_install/conf/isopackage.sdf"
+  if [ ! -f ${isopackage_path} ]; then
+    echo "error: ${isopackage_path} is not exist"
+    return 1
+  fi
+  kernel_rpm_path="repos/euler_base/kernel-${KERNEL_VERSION_NUM}*."${ISO_ARCH}".rpm"
+  if [ ! -f ${kernel_rpm_path} ]; then
+    echo "error: ${kernel_rpm_path} is not exist, please check package kernel's version"
+    return 1
+  fi
+  compile_time=$(date +%Y-%m-%d-%H-%M-%S)
+  kernel_version=$(rpm -qp --qf '%{VERSION}' ${kernel_rpm_path})
+  kernel_release_arch=$(rpm -qp --qf '-%{RELEASE}.%{ARCH}' ${kernel_rpm_path})
+  sed -i "s/^compiletime=.*/compiletime=${compile_time}/g" ${isopackage_path}
+  sed -i "s/^eulerversion=.*/eulerversion=openEuler/g" ${isopackage_path}
+  sed -i "s/^kernelversion=.*/kernelversion=${kernel_version}/g" ${isopackage_path}
+  sed -i "s/^localversion=.*/localversion=${kernel_release_arch}/g" ${isopackage_path}
+
+  echo "fn_init_for_openEuler end"
+  return 0
+}
+
+#########################################################
+# 功能：检查各配置文件的密码是否不为空
+# 规则：
+#########################################################
+function fn_check_pwd {
+  grub_pwd_path="${SYS_CUSTOM_CONF_PATH}/usr_file/etc/default/grub"
+  if [ $(grep -c "GRUB_PASSWORD=\".*\"" ${grub_pwd_path}) -eq 0 ]; then
+    echo "error: password config is empty, please check GRUB_PASSWORD config in file ${grub_pwd_path}"
+    return 1
+  fi
+
+  check_path_arr=("${SYS_CUSTOM_CONF_PATH}/rpm.conf" "${KIWI_MINIOS}/cfg_minios/rpm.conf" "${KIWI_MINIOS}/cfg_minios_efi/rpm.conf")
+  for item in "${check_path_arr[@]}"; do
+    if [ -f ${item} ] && [ $(grep -c "pwd=\"\"" ${item}) -ne 0 ]; then
+      echo "error: password config is empty, please check pwd config in file ${item}"
+      return 1
+    fi
+  done
+  return 0
+}
+
+#########################################################
+# 功能：主入口
+# 规则：
+# 1、root用户+单进程执行
+# 2、校验入参格式
+# 3、安装repo
+# 4、制作minios
+# 5、制作iso
+
+#########################################################
+
+function fn_main() {
+  fn_do_clean
+
+  local ret=
+  local pid=
+
+  if [ $(id -u) -ne 0 ]; then
+    echo "error: only the user root can make dopra linux iso."
+    return 1
+  fi
+
+  ret=$(ps -ef | grep mkdliso | grep -v $$ | grep "\-p" | grep "\-c" | wc -l)
+  if [ $ret -ge 1 ]; then
+    if [ -f $MKDLISO_PID ]; then
+      pid="$(cat $MKDLISO_PID)"
+      ps -ef | awk -F ' ' '{print $2}' | grep -w $pid >/dev/null
+      if [ $? -eq 0 ]; then
+        echo "error: seems mkdliso is already running, not allow parallel"
+        return 1
+      fi
+    fi
+  fi
+  echo $$ >$MKDLISO_PID
+  ret=0
+
+  fn_verify_input "$@"
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+
+  fn_check_pwd
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+
+  fn_init_for_openEuler
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+
+  fn_createrepo
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+
+  fn_minios
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+
+  fn_make_iso $SYS_CUSTOM_CONF_PATH
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+
+  fn_do_clean
+
+  return 0
+}
+
+fn_main "$@"
+ret=$?
+umask $UMASK_BAK
+exit $ret
