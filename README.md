@@ -1,23 +1,19 @@
 # imageTailor
 
 #### 介绍
-a tool for tailoring image
+裁剪ISO工具
 
 #### 软件架构
-软件架构说明
-
+不区分架构
 
 #### 安装教程
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+yum install imageTailor
 
 #### 使用说明
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+cd /opt/imageTailor
+./mkdliso -h
 
 #### 参与贡献
 

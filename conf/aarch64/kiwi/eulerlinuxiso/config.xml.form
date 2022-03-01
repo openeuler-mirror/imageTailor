@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<image schemaversion="6.8" name="eulerlinux">
+    <description type="system">
+        <author></author>
+        <contact></contact>
+        <specification>openEuler pxe initrd</specification>
+    </description>
+    <preferences>
+        <version>1.0.0</version>
+        <packagemanager>yum</packagemanager>
+        <bootsplash-theme>upstream</bootsplash-theme>
+        <bootloader-theme>upstream</bootloader-theme>
+        <locale>en_US</locale>
+        <keytable>us.map.gz</keytable>
+        <rpm-check-signatures>false</rpm-check-signatures>
+        <type image="pxe" filesystem="ext4" boot="pxeboot/eulerlinuximage"/>
+    </preferences>
+    EULERLINUX_RPM_REPOSITORY
+    <packages type="image">
+        <package name="filesystem"/>
+    </packages>
+    <packages type="bootstrap">
+        <package name="filesystem"/>
+        <package name="basesystem"/>
+        <package name="coreutils"/>
+    </packages>
+</image>
