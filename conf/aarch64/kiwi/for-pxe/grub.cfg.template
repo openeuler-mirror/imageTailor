@@ -1,0 +1,18 @@
+#
+# Sample GRUB2 configuration file
+#
+
+# Boot automatically after 5 seconds
+set timeout=5
+
+# By default, boot the openEuler
+set default=openeuler
+
+# For booting GNU/Linux
+
+
+menuentry "Install openEuler 22.03 aarch64" --id openeuler --unrestricted {
+    set boot=(tftp,PXE_SERVER_IP)
+    linux /boot/linux rdinit=/sbin/init console=ttyAMA0,115200 earlycon vga=0x317 console=tty0 nohz=off crashkernel=1024M crash_kexec_post_notifiers install_mode=install install_media=pxe install_disk=/dev/sda install_repo=tftp://PXE_SERVER_IP/all soft_raid=off
+    initrd /boot/initrd
+}
