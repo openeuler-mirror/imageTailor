@@ -21,19 +21,19 @@ cp -a conf/${iso_arch}/* %{buildroot}/opt/imageTailor
 cp -a conf/common/* %{buildroot}/opt/imageTailor
 cp -a mkdliso %{buildroot}/opt/imageTailor
 
-for file in `find %{buildroot}/opt/imageTailor -name "security_s.conf"`;do chmod 600 $file;done
-for file in `find %{buildroot}/opt/imageTailor -name "S00setcap"`;do chmod 600 $file;done
-for file in `find %{buildroot}/opt/imageTailor -name "S00reboot"`;do chmod 600 $file;done
-for file in `find %{buildroot}/opt/imageTailor -name "isopackage.sdf"`;do chmod 600 $file;done
+for file in $(find %{buildroot}/opt/imageTailor -name "security_s.conf");do chmod 600 $file;done
+for file in $(find %{buildroot}/opt/imageTailor -name "S00setcap");do chmod 600 $file;done
+for file in $(find %{buildroot}/opt/imageTailor -name "S00reboot");do chmod 600 $file;done
+for file in $(find %{buildroot}/opt/imageTailor -name "isopackage.sdf");do chmod 600 $file;done
 
 chmod 600 %{buildroot}/opt/imageTailor/custom/cfg_*/cmd.conf
 chmod 600 %{buildroot}/opt/imageTailor/custom/cfg_*/rpm.conf
 chmod 600 %{buildroot}/opt/imageTailor/custom/cfg_*/security_s.conf
 chmod 600 %{buildroot}/opt/imageTailor/custom/cfg_*/sys.conf
 
-chmod -R 500 %{buildroot}/opt/imageTailor/kiwi/hook/config.sh
-chmod -R 500 %{buildroot}/opt/imageTailor/kiwi/hook/images.sh
-chmod -R 500 %{buildroot}/opt/imageTailor/mkdliso
+chmod 500 %{buildroot}/opt/imageTailor/kiwi/hook/config.sh
+chmod 500 %{buildroot}/opt/imageTailor/kiwi/hook/images.sh
+chmod 500 %{buildroot}/opt/imageTailor/mkdliso
 
 cd -
 
