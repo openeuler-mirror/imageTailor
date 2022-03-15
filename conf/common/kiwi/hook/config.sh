@@ -17,11 +17,7 @@
 test -f /.kconfig && . /.kconfig
 test -f /.profile && . /.profile
 
-if [ -f '/usr/Euler/conf/EulerLinux.conf' ]; then
-  EL_CONFIG='/usr/Euler/conf/EulerLinux.conf'
-else
-  EL_CONFIG='/usr/Euler/conf/euler-release'
-fi
+EL_CONFIG='/usr/Euler/conf/euler-release'
 EL_CUSTOM_RPM='/usr/custom/rpm'
 EL_CUSTOM_USRFILE='/usr/custom/usrfile'
 EL_USRRPM_FILELST='/opt/usrrpm_filelst'
@@ -140,7 +136,7 @@ function configTimeZone() {
   return ${ret}
 }
 
-function initEulerLinux() {
+function init_euler_release() {
   local dl_hostname="EULER"
   local dl_service_enable='syslog boot.localnet network sshd'
   local dl_usermodules_autoload=''
@@ -240,8 +236,8 @@ function initEulerLinux() {
 
 echo "Configure image: [${kiwi_iname}]..."
 
-echo "initEulerLinux start ..."
-initEulerLinux
+echo "init_euler_release start ..."
+init_euler_release
 if [ $? -ne 0 ]; then
   exit 1
 fi

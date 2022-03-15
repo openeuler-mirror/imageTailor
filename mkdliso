@@ -30,12 +30,7 @@ umask 0022
 KIWI_EULERLINUX_GRUB2="kiwi/grub2"
 PRODUCT_CONF="kiwi/eulerkiwi/product.conf"
 PRODUCT_TYPE=""
-
-if [ "${ISO_ARCH}" = "x86_64" ]; then
-  SYS_CONFIG_NAME="EulerLinux.conf"
-else
-  SYS_CONFIG_NAME="euler-release"
-fi
+SYS_CONFIG_NAME="euler-release"
 
 #########################################################
 # avail enumeration list
@@ -416,7 +411,7 @@ function get_src_info_from_log() {
 
   fn_get_info_between_two_lines "start print src info" "end print src info" "$log_file" "$parse_file"
   if [ $? -eq 0 ]; then
-    cat "$parse_file" | awk '{print $4}' | sort | uniq | sed -E "s/(.*)-(.*-)/\1:\2/" | sed 's/.euleros.*//g' | sed 's/.h[0-9]*$//g' >"$src_result_file"
+    cat "$parse_file" | awk '{print $4}' | sort | uniq | sed -E "s/(.*)-(.*-)/\1:\2/" | sed 's/.oe1.*//g' | sed 's/.h[0-9]*$//g' >"$src_result_file"
     cat "$parse_file" | awk '{print $4}' | sort | uniq | sed -E "s/(.*)-(.*-)/\1:\2/" >"$src_rpmlist_file"
     fn_get_info_between_two_lines "start print bin info" "end print bin info" "$log_file" "$parse_file"
     if [ $? -eq 0 ]; then
@@ -464,7 +459,7 @@ function get_src_info_from_log() {
       done
     fi
   done
-  cat "$parse_workdir/find_src" | awk '{print $2}' | sort | uniq | sed -E "s/(.*)-(.*-)/\1:\2/" | sed 's/.euleros.*//g' | sed 's/.h[0-9]*$//g' >"$src_result_file"
+  cat "$parse_workdir/find_src" | awk '{print $2}' | sort | uniq | sed -E "s/(.*)-(.*-)/\1:\2/" | sed 's/.oe1.*//g' | sed 's/.h[0-9]*$//g' >"$src_result_file"
   cat "$parse_workdir/find_src" | awk '{print $2}' | sort | uniq | sed -E "s/(.*)-(.*-)/\1:\2/" >"$src_rpmlist_file"
   cat "$parse_workdir/find_src" | awk '{print $1}' | sort | uniq | sed -E "s/(.*)-(.*-)/\1:\2/" | sed -E 's/(.*)\.(.*)/\1:\2/' >"$bin_rpmlist_file"
   rm -rf "$parse_workdir"
@@ -519,7 +514,7 @@ function fn_log_manage() {
 
   sys_custom_log_array=$(ls -t $MKISO_LOG/sys_custom_log_*.tar.gz 2>/dev/null)
   sys_custom_log_array=(${sys_custom_log_array})
-  arraynum=${#sys_custom_log_array}
+  arraynum=${#sys_custom_log_array[@]}
   if [ $arraynum -gt $MAXLOGNUM ]; then
     echo "the number of log file in $MKISO_LOG more than $MAXLOGNUM, will delete old logfile"
     for ((i = $MAXLOGNUM; i < arraynum; i++)); do
@@ -2159,7 +2154,6 @@ function fn_init_for_openEuler() {
   kernel_version=$(rpm -qp --qf '%{VERSION}' ${kernel_rpm_path})
   kernel_release_arch=$(rpm -qp --qf '-%{RELEASE}.%{ARCH}' ${kernel_rpm_path})
   sed -i "s/^compiletime=.*/compiletime=${compile_time}/g" ${isopackage_path}
-  sed -i "s/^eulerversion=.*/eulerversion=openEuler/g" ${isopackage_path}
   sed -i "s/^kernelversion=.*/kernelversion=${kernel_version}/g" ${isopackage_path}
   sed -i "s/^localversion=.*/localversion=${kernel_release_arch}/g" ${isopackage_path}
 
