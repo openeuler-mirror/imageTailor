@@ -163,10 +163,6 @@ function getSrcInfoFromRpm() {
 }
 
 EL_CONFIG='/usr/Euler/conf/euler-release'
-if [ -f '/usr/Euler/conf/EulerLinux.conf' ]; then
-  EL_CONFIG='/usr/Euler/conf/EulerLinux.conf'
-fi
-
 EL_USRRPM_FILELIST='/opt/usrrpm_filelst'
 EL_UER_KOLST='/opt/usrrpm_filelst_kolst'
 
@@ -195,7 +191,7 @@ if [ -z "${sys_cut}" ]; then
   sys_cut="yes"
 fi
 
-if [ -f '/usr/Euler/conf/EulerLinux.conf' ]; then
+if [ -f '/usr/Euler/conf/euler-release' ]; then
   rm -rf /etc/sysconfig/grub
 fi
 
@@ -276,7 +272,7 @@ fi
 rm -rf /usr/custom
 chmod +x /etc/rc.d/rc.local 2>/dev/null
 
-if [ -f '/usr/Euler/conf/EulerLinux.conf' ]; then
+if [ -f '/usr/Euler/conf/euler-release' ]; then
   [ -d /usr/lib/grub ] && ln -s /usr/lib/grub /usr/lib/grub2
 fi
 
