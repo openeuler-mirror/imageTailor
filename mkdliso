@@ -47,7 +47,6 @@ AVAIL_SYS_UTC=("yes" "no")
 
 AVAIL_PRODUCT_MEM=$(cat $PRODUCT_CONF | grep -v "^#" | grep -v "^$" | grep "MEMORY" | awk -F " " '{print $1}')
 AVAIL_PRODUCT_MEM_NAME="("${AVAIL_PRODUCT_MEM}")"
-KERNEL_VERSION_NUM=5 # repos/euler_base/kernel-5*
 
 #########################################################
 # minios val
@@ -88,7 +87,8 @@ COMPILE_ENV=""
 KIWI_ISOBOOT="/usr/share/kiwi/custom_boot/pxeboot"
 KIWI_MODULES="/usr/share/kiwi/modules/"
 KIWI_METADATA="/usr/share/kiwi/metadata/"
-KIWI_STRIP_XML="/usr/lib/python3.9/site-packages/kiwi/config/strip.xml"
+python_v=$(python3 -V 2>&1|awk '{print $2}'|awk -F '.' '{print $1 "." $2}')
+KIWI_STRIP_XML="/usr/lib/python${python_v}/site-packages/kiwi/config/strip.xml"
 KIWI_EULERLINUX_DOPRA_IMAGE="${KIWI_ISOBOOT}/dopralinuximage"
 KIWI_EULERLINUX_IMAGE="${KIWI_ISOBOOT}/eulerlinuximage"
 KIWI_EULERLINUX_ISO="kiwi/eulerlinuxiso"
@@ -2145,7 +2145,7 @@ function fn_init_for_openEuler() {
     echo "error: ${isopackage_path} is not exist"
     return 1
   fi
-  kernel_rpm_path="repos/euler_base/kernel-${KERNEL_VERSION_NUM}*."${ISO_ARCH}".rpm"
+  kernel_rpm_path="repos/euler_base/kernel-[1-9]*."${ISO_ARCH}".rpm"
   if [ ! -f ${kernel_rpm_path} ]; then
     echo "error: ${kernel_rpm_path} is not exist, please check package kernel's version"
     return 1
@@ -2172,7 +2172,7 @@ function fn_check_pwd {
     return 1
   fi
 
-  check_path_arr=("${SYS_CUSTOM_CONF_PATH}/rpm.conf" "${KIWI_MINIOS}/cfg_minios/rpm.conf" "${KIWI_MINIOS}/cfg_minios_efi/rpm.conf")
+  check_path_arr=("${SYS_CUSTOM_CONF_PATH}/rpm.conf" "${KIWI_MINIOS}/cfg_minios/rpm.conf")
   for item in "${check_path_arr[@]}"; do
     if [ -f ${item} ] && [ $(grep -c "pwd=\"\"" ${item}) -ne 0 ]; then
       echo "error: password config is empty, please check pwd config in file ${item}"
