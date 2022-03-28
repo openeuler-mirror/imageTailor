@@ -104,9 +104,15 @@ function getSrcInfo() {
     return 1
   fi
 
+  find_array=()
   while read line; do
     find_rpm=$(grep ^${line}$ ${rpmlistdir}/* | awk -F ':' '{print $1}')
     if [ -n "${find_rpm}" ]; then
+      if $(echo "${find_array[@]}" |grep -wq "${find_rpm}" ); then
+        continue
+      fi
+      find_array[${#find_array[@]}]=${find_rpm}
+
       for rname in ${find_rpm}; do
         grep $(basename $rname) ${rpmandsrclist} | awk '{print $2}' >>${workdir}/find_src
         if [ $? -ne 0 ]; then
