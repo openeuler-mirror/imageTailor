@@ -411,7 +411,7 @@ function get_src_info_from_log() {
 
   fn_get_info_between_two_lines "start print src info" "end print src info" "$log_file" "$parse_file"
   if [ $? -eq 0 ]; then
-    cat "$parse_file" | awk '{print $4}' | sort | uniq | sed -E "s/(.*)-(.*-)/\1:\2/" | sed 's/.oe1.*//g' | sed 's/.h[0-9]*$//g' >"$src_result_file"
+    cat "$parse_file" | awk '{print $4}' | sort | uniq | sed -E "s/(.*)-(.*-)/\1:\2/" | sed 's/.oe[0-9].*//g' | sed 's/.h[0-9]*$//g' >"$src_result_file"
     cat "$parse_file" | awk '{print $4}' | sort | uniq | sed -E "s/(.*)-(.*-)/\1:\2/" >"$src_rpmlist_file"
     fn_get_info_between_two_lines "start print bin info" "end print bin info" "$log_file" "$parse_file"
     if [ $? -eq 0 ]; then
@@ -459,7 +459,7 @@ function get_src_info_from_log() {
       done
     fi
   done
-  cat "$parse_workdir/find_src" | awk '{print $2}' | sort | uniq | sed -E "s/(.*)-(.*-)/\1:\2/" | sed 's/.oe1.*//g' | sed 's/.h[0-9]*$//g' >"$src_result_file"
+  cat "$parse_workdir/find_src" | awk '{print $2}' | sort | uniq | sed -E "s/(.*)-(.*-)/\1:\2/" | sed 's/.oe[0-9].*//g' | sed 's/.h[0-9]*$//g' >"$src_result_file"
   cat "$parse_workdir/find_src" | awk '{print $2}' | sort | uniq | sed -E "s/(.*)-(.*-)/\1:\2/" >"$src_rpmlist_file"
   cat "$parse_workdir/find_src" | awk '{print $1}' | sort | uniq | sed -E "s/(.*)-(.*-)/\1:\2/" | sed -E 's/(.*)\.(.*)/\1:\2/' >"$bin_rpmlist_file"
   rm -rf "$parse_workdir"
