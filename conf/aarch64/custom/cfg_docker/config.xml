@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<image schemaversion="6.2" name="docker">
+    <description type="system">
+        <author>pmail_openEuler</author>
+        <contact>buildteam@openeuler.org</contact>
+        <specification>openEuler docker container</specification>
+    </description>
+    <preferences>
+        <type image="tbz">
+            <machine>
+                <vmdisk/>
+                <vmnic interface="eth0" mode="veth"/>
+            </machine>
+        </type>
+        <version>1.0.0</version>
+        <packagemanager>yum</packagemanager>
+        <rpm-check-signatures>false</rpm-check-signatures>
+        <rpm-force>true</rpm-force>
+        <locale>en_US</locale>
+        <keytable>us.map.gz</keytable>
+        <hwclock>utc</hwclock>
+        <timezone>Asia/Beijing</timezone>
+    </preferences>
+
+    <!--obs_repo_here-->
+    <repository type="rpm-md"><source path="" /></repository>
+
+    <packages type="image">
+        <package name="basesystem"/>
+        <package name="bash"/>
+        <package name="yum"/>
+        <package name="coreutils"/>
+        <package name="openEuler-release"/>
+        <package name="security-tool"/>
+        <package name="procps-ng"/>
+        <package name="vim-minimal"/>
+        <package name="tar"/>
+        <package name="findutils"/>
+    </packages>
+    <packages type="bootstrap">
+         <package name="filesystem"/>
+    </packages>
+
+</image>
