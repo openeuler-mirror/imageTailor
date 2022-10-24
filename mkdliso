@@ -117,6 +117,9 @@ MAXLOGNUM=50
 ISO_NAME="openEuler-${ISO_ARCH}.iso"
 ISO_SHA256="$ISO_NAME.sha256"
 
+CPIO_NAME="openEuler-image-qemu-${ISO_ARCH}-$(date '+%Y%m%d%H%M%S').rootfs.cpio.gz"
+CPIO_SHA256='$CPIO_NAME.sha256'
+
 RELEASE_TAR_NAME='os_release.tgz'
 RELEASE_TAR_SHA256='os_release.tgz.sha256'
 
@@ -1744,7 +1747,16 @@ function fn_do_kiwi() {
     sha256sum $RELEASE_TAR_NAME >$RELEASE_TAR_SHA256
     echo "Complete release tar file at: ${release_dir}/$RELEASE_TAR_NAME"
     cd - >/dev/null 2>&1
+  elif [ "$RELEASE_TYPE" = "CPIO" ]; then
+    local cpio_initrd_file = $(ls ${MYISO_RESULT} | grep initrd$)
+    release_dir="${MKISO_RESULT}/$(date +%Y-%m-%d-%H-%M)"
+    mkdir -p ${release_dir}
 
+    cp ${MYISO_RESULT}/$cpio_initrd_file ${release_dir}/$CPIO_NAME
+    cd ${release_dir}
+    sha256sum $CPIO_NAME >$CPIO_SHA256
+    echo "Complete release cpio file at: ${release_dir}/$CPIO_NAME"
+    cd - >/dev/null 2>&1
   else
     echo ${AVAIL_PRODUCT_MEM_NAME[*]} | grep -w "${PRODUCT_NAME}" >/dev/null 2>&1
     if [ $? -eq 0 ]; then
