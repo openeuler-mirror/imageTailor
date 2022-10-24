@@ -671,11 +671,6 @@ function fn_verify_input() {
     exit 1
   fi
 
-  if [ -z "$(echo "$input_param" | grep -w "\-p")" -a -z "$(echo $input_param | grep -w "\-\-product")" -a $# -gt 1 ]; then
-    echo "error: missing param -p or --product"
-    exit 1
-  fi
-
   if [ -z "$(echo "$input_param" | grep -w "\-c")" -a -z "$(echo $input_param | grep -w "\-\-cfg\-path")" -a $# -gt 1 ]; then
     echo "error: missing param -c or --cfg-path"
     exit 1
@@ -683,17 +678,8 @@ function fn_verify_input() {
 
   while [ $# -ge 1 ]; do
     case "$1" in
-    -h | --help)
-      fn_usage
-      exit 0
-      ;;
     -p | --product)
-      check_product $2
-      if [ $? -eq 0 ]; then
-        shift 2
-      else
-        exit 1
-      fi
+      shift 2
       ;;
     -c | --cfg-path)
       check_cfgpath $2
@@ -714,10 +700,6 @@ function fn_verify_input() {
     --sec)
       SEC_HARDEN=1
       shift 1
-      ;;
-    *)
-      echo "error: params is invalid, please check it."
-      exit 1
       ;;
     esac
   done
@@ -2183,41 +2165,236 @@ function fn_check_pwd {
 }
 
 #########################################################
-# 功能：主入口
-# 规则：
-# 1、root用户+单进程执行
-# 2、校验入参格式
-# 3、安装repo
-# 4、制作minios
-# 5、制作iso
+# 功能：获取产品名称
+# 规则
+# 1、参数个数大于0
+# 2、-p/--product
+#########################################################
+function fn_verify_product_name() {
+  local input_param=$@
+
+  if [ $# -lt 1 ]; then
+    echo "error: missing param, please check it"
+    exit 1
+  fi
+
+  if [ -z "$(echo "$input_param" | grep -w "\-p")" -a -z "$(echo $input_param | grep -w "\-\-product")" -a $# -gt 1 ]; then
+    echo "error: missing param -p or --product"
+    exit 1
+  fi
+
+  while [ $# -ge 1 ]; do
+    case "$1" in
+    -h | --help)
+      fn_usage
+      exit 0
+      ;;
+    -p | --product)
+      check_product $2
+      if [ $? -eq 0 ]; then
+        shift 2
+      else
+        exit 1
+      fi
+      ;;
+    -c | --cfg-path)
+      shift 2
+      ;;
+    --minios)
+      shift 2
+      ;;
+    --sec)
+      shift 1
+      ;;
+    *)
+      echo "error: params is invalid, please check it."
+      exit 1
+      ;;
+    esac
+  done
+
+  return 0
+}
 
 #########################################################
+# 功能：校验入参格式
+# 规则
+# 1、参数个数大于0
+# 2、-p/--product 和 -c/-cfg-path 参数必选
+# 3、对参数进行枚举和功能校验，不允许出现例外参数
+#########################################################
+function fn_check_docker_input() {
+  local input_param=$@
 
-function fn_main() {
-  fn_do_clean
+  if [ $# -lt 1 ]; then
+    echo "error: missing param, please check it"
+    exit 1
+  fi
 
-  local ret=
-  local pid=
+  if [ -z "$(echo "$input_param" | grep -w "\-c")" -a -z "$(echo $input_param | grep -w "\-\-cfg\-path")" -a $# -gt 1 ]; then
+    echo "error: missing param -c or --cfg-path"
+    exit 1
+  fi
 
-  if [ $(id -u) -ne 0 ]; then
-    echo "error: only the user root can make dopra linux iso."
+  while [ $# -ge 1 ]; do
+    case "$1" in
+    -p | --product)
+      shift 2
+      ;;
+    -c | --cfg-path)
+      check_docker_cfgpath $2
+      if [ $? -eq 0 ]; then
+        shift 2
+      else
+        exit 1
+      fi
+      ;;
+    *)
+      echo "error: params is invalid, please check it."
+      exit 1
+      ;;
+    esac
+  done
+
+  if [ -z "$SYS_CUSTOM_CONF_PATH" -o -z "$PRODUCT_NAME" ]; then
+    echo "error: cfgpath or product is null, please check it."
+    fn_usage
+    exit 1
+  fi
+
+  return 0
+
+}
+
+#########################################################
+# 功能: 校验并设置cfg配置路径
+# 规则：
+# 1、目录必须存在
+#########################################################
+function check_docker_cfgpath() {
+  local cfgpath=$1
+
+  if [ ! -d "$cfgpath" ]; then
+    echo "error: cfgpath must be a directory"
     return 1
   fi
 
-  ret=$(ps -ef | grep mkdliso | grep -v $$ | grep "\-p" | grep "\-c" | wc -l)
-  if [ $ret -ge 1 ]; then
-    if [ -f $MKDLISO_PID ]; then
-      pid="$(cat $MKDLISO_PID)"
-      ps -ef | awk -F ' ' '{print $2}' | grep -w $pid >/dev/null
-      if [ $? -eq 0 ]; then
-        echo "error: seems mkdliso is already running, not allow parallel"
-        return 1
-      fi
-    fi
-  fi
-  echo $$ >$MKDLISO_PID
-  ret=0
+  SYS_CUSTOM_CONF_PATH=$cfgpath
 
+  return 0
+}
+
+######################
+# 功能: 准备kiwi环境
+# 规则：
+######################
+function kiwi_init() {
+    if [ ! -f /usr/share/perl5/vendor_perl/Env.pm ]; then
+        cp "$SYS_CUSTOM_CONF_PATH/Env.pm" /usr/share/perl5/vendor_perl/
+    fi
+
+	  yum install -y python3-kiwi
+
+    umask_value=$(umask)
+    if [ "x${umask_value}" != "x0022" ]; then
+        umask 0022
+    fi
+    if [ ! -d /var/run/screen/S-root ]; then
+        mkdir -p /var/run/screen/S-root
+    fi
+}
+
+######################
+# 功能: 拷贝交付件到结果目录
+# 规则：
+# 1、创建结果目录，拷贝交付件
+######################
+function copy_file_to_result() {
+    mkdir -p $MKISO_RESULT
+    release_dir="${MKISO_RESULT}/$(date +%Y-%m-%d-%H-%M)"
+    mkdir -p "${release_dir}"
+    for file_name in $@
+    do
+      cp -a "${file_name}" "${release_dir}"
+    done
+}
+
+######################
+# 功能: 制作docker镜像
+# 规则：
+# 1、准备环境
+# 2、制作镜像
+# 3、生成附带信息文件
+######################
+function make_docker_image() {
+    work_dir="$CURRENT_PATH/make_docker"
+    repo_dir="${work_dir}/repository"
+    img_dir="${work_dir}/image"
+    cfg_dir="${work_dir}/config"
+
+    if [ -d "${work_dir}" ]; then rm -rf "$work_dir";fi
+    mkdir -p $work_dir
+
+    if [ -d "${img_dir}" ]; then rm -rf "${img_dir}";fi
+    mkdir -p "${img_dir}"
+
+    if [ -d "${repo_dir}" ]; then rm -rf "${repo_dir}";fi
+    mkdir -p "${repo_dir}"
+
+    if [ -d "${cfg_dir}" ]; then rm -rf "${cfg_dir}";fi
+    mkdir -p "${cfg_dir}"
+
+    mkdir -p /var/adm/fillup-templates/
+    cp "$SYS_CUSTOM_CONF_PATH"/passwd /var/adm/fillup-templates/passwd.aaa_base
+    cp "$SYS_CUSTOM_CONF_PATH"/group /var/adm/fillup-templates/group.aaa_base
+
+    # build
+
+    cp -a "$SYS_CUSTOM_CONF_PATH"/config.xml "${cfg_dir}"/config.xml
+    cp "$SYS_CUSTOM_CONF_PATH"/images.sh "${cfg_dir}"
+
+    chmod 700 /var/run/screen/S-root
+    #Removing yum repos in kiwi build
+    if [ -d /var/cache/kiwi/yum ];then
+        rm -rf /var/cache/kiwi/yum
+    fi
+    kiwicompat --build "${cfg_dir}" -d "${img_dir}"
+    if [ $? -ne 0 ];then
+        log_error "Failed on kiwi build docker image" &> /dev/null
+    fi
+
+    # upload image
+    docker_img_path_tmp=$(ls "${img_dir}"/*.tar.xz)
+    docker_img_path="${img_dir}/docker.${ISO_ARCH}.tar.xz"
+    docker_img_source_list="${img_dir}/docker_source.rpmlist"
+    docker_img_binary_list="${img_dir}/docker_binary.rpmlist"
+    mv "$docker_img_path_tmp" "${docker_img_path}"
+    rm -rf tmp;mkdir -p tmp;tar xf "${docker_img_path}" -C ./tmp
+    chroot ./tmp /bin/bash -c "rpm -qai|grep 'Source RPM'" > ${img_dir}/sourcelist;cat ${img_dir}/sourcelist|awk '{print $4}'|sort|uniq > "$docker_img_source_list"
+    chroot ./tmp /bin/bash -c "rpm -qa" > ${img_dir}/binarylist;cat ${img_dir}/binarylist|sort|uniq > "$docker_img_binary_list"
+    rm -rf ./tmp
+
+    docker_img_size="${img_dir}/docker_img.size"
+    ls -al "${docker_img_path}" | awk '{print $5}' > "$docker_img_size"
+
+    cd "${img_dir}"
+    sha256sum "docker.${ISO_ARCH}.tar.xz" > "docker.${ISO_ARCH}.tar.xz.sha256sum"
+    cd - > /dev/null
+    copy_file_to_result "${docker_img_path}" "${docker_img_path}.sha256sum" "$docker_img_source_list" "$docker_img_binary_list" "$docker_img_size"
+    rm -rf "$work_dir"
+    return 0
+}
+
+#########################################################
+# 功能：裁剪入口
+# 规则：
+# 1、校验入参格式
+# 2、检查
+# 3、安装repo
+# 4、制作minios
+# 5、制作iso
+#########################################################
+fn_do_isocut() {
   fn_verify_input "$@"
   if [ $? -ne 0 ]; then
     return 1
@@ -2249,6 +2426,83 @@ function fn_main() {
   fi
 
   fn_do_clean
+  return 0
+}
+
+#########################################################
+# 功能：制作镜像入口
+# 规则：
+# 1、校验入参格式
+# 2、准备kiwi
+# 3、制作docker镜像
+#########################################################
+fn_make_iso_docker() {
+  fn_check_docker_input "$@"
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+
+  kiwi_init
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+
+  make_docker_image
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+  return 0
+}
+
+#########################################################
+# 功能：主入口
+# 规则：
+# 1、root用户+单进程执行
+# 2、获取产品名
+# 3、选择裁剪或制作docker
+#########################################################
+
+function fn_main() {
+  fn_do_clean
+
+  local ret=
+  local pid=
+
+  if [ $(id -u) -ne 0 ]; then
+    echo "error: only the user root can make dopra linux iso."
+    return 1
+  fi
+
+  ret=$(ps -ef | grep mkdliso | grep -v $$ | grep "\-p" | grep "\-c" | wc -l)
+  if [ $ret -ge 1 ]; then
+    if [ -f $MKDLISO_PID ]; then
+      pid="$(cat $MKDLISO_PID)"
+      ps -ef | awk -F ' ' '{print $2}' | grep -w $pid >/dev/null
+      if [ $? -eq 0 ]; then
+        echo "error: seems mkdliso is already running, not allow parallel"
+        return 1
+      fi
+    fi
+  fi
+  echo $$ >$MKDLISO_PID
+  ret=0
+
+  fn_verify_product_name "$@"
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+
+  if [ $PRODUCT_NAME = "docker" ];then
+    fn_make_iso_docker "$@"
+    if [ $? -ne 0 ]; then
+      return 1
+    fi
+  else
+    fn_do_isocut "$@"
+    if [ $? -ne 0 ]; then
+      return 1
+    fi
+  fi
 
   return 0
 }
