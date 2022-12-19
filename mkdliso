@@ -118,7 +118,7 @@ ISO_NAME="openEuler-${ISO_ARCH}.iso"
 ISO_SHA256="$ISO_NAME.sha256"
 
 CPIO_NAME="openEuler-image-qemu-${ISO_ARCH}-$(date '+%Y%m%d%H%M%S').rootfs.cpio.gz"
-CPIO_SHA256='$CPIO_NAME.sha256'
+CPIO_SHA256="${CPIO_NAME}.sha256"
 
 RELEASE_TAR_NAME='os_release.tgz'
 RELEASE_TAR_SHA256='os_release.tgz.sha256'
@@ -1748,7 +1748,7 @@ function fn_do_kiwi() {
     echo "Complete release tar file at: ${release_dir}/$RELEASE_TAR_NAME"
     cd - >/dev/null 2>&1
   elif [ "$RELEASE_TYPE" = "CPIO" ]; then
-    local cpio_initrd_file = $(ls ${MYISO_RESULT} | grep initrd$)
+    local cpio_initrd_file=$(ls ${MYISO_RESULT} | grep initrd$)
     release_dir="${MKISO_RESULT}/$(date +%Y-%m-%d-%H-%M)"
     mkdir -p ${release_dir}
 
@@ -2161,18 +2161,25 @@ function fn_init_for_openEuler() {
 #########################################################
 function fn_check_pwd {
   grub_pwd_path="${SYS_CUSTOM_CONF_PATH}/usr_file/etc/default/grub"
-  if [ $(grep -c "GRUB_PASSWORD=\".*\"" ${grub_pwd_path}) -eq 0 ]; then
+  if [ -f ${grub_pwd_path} ] && [ $(grep -c "GRUB_PASSWORD=\".*\"" ${grub_pwd_path}) -eq 0 ]; then
     echo "error: password config is empty, please check GRUB_PASSWORD config in file ${grub_pwd_path}"
     return 1
   fi
 
-  check_path_arr=("${SYS_CUSTOM_CONF_PATH}/rpm.conf" "${KIWI_MINIOS}/cfg_minios/rpm.conf")
-  for item in "${check_path_arr[@]}"; do
-    if [ -f ${item} ] && [ $(grep -c "pwd=\"\"" ${item}) -ne 0 ]; then
-      echo "error: password config is empty, please check pwd config in file ${item}"
+  rpm_pwd_path="${SYS_CUSTOM_CONF_PATH}/rpm.conf"
+  if [ -f ${rpm_pwd_path} ] && [ $(grep -c "pwd=\"\"" ${rpm_pwd_path}) -ne 0 ]; then
+    echo "error: password config is empty, please check pwd config in file ${rpm_pwd_path}"
+    return 1
+  fi
+  
+  minios_pwd_path="${KIWI_MINIOS}/cfg_minios/rpm.conf"
+  minios_cfg_path="kiwi/eulerkiwi/minios.conf"
+  if [[ $(grep -c "\<${PRODUCT_NAME}.*" ${minios_cfg_path}) -ne 0 ]]; then
+    if [ -f ${minios_pwd_path} ] && [ $(grep -c "pwd=\"\"" ${minios_pwd_path}) -ne 0 ]; then
+      echo "error: password config is empty, please check pwd config in file ${minios_pwd_path}"
       return 1
     fi
-  done
+  fi
   return 0
 }
 
