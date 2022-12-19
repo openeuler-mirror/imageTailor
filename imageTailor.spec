@@ -2,7 +2,7 @@ Name:         imageTailor
 Summary:      Cut out the ISO
 License:      Mulan PSL v2
 Group:        System/Management
-Version:      1.0.1
+Version:      1.0.4
 Release:      1
 BuildRoot:    %{_tmppath}/%{name}-%{version}
 Source:       https://gitee.com/openeuler/imageTailor/repository/archive/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
@@ -21,19 +21,22 @@ cp -a conf/${iso_arch}/* %{buildroot}/opt/imageTailor
 cp -a conf/common/* %{buildroot}/opt/imageTailor
 cp -a mkdliso %{buildroot}/opt/imageTailor
 
-for file in $(find %{buildroot}/opt/imageTailor -name "security_s.conf");do chmod 600 $file;done
-for file in $(find %{buildroot}/opt/imageTailor -name "S00setcap");do chmod 600 $file;done
-for file in $(find %{buildroot}/opt/imageTailor -name "S00reboot");do chmod 600 $file;done
-for file in $(find %{buildroot}/opt/imageTailor -name "isopackage.sdf");do chmod 600 $file;done
+# for user install hook config
+chmod 600 %{buildroot}/opt/imageTailor/custom/cfg_*/usr_install/hook/install_succ_hook/S00reboot
+chmod 600 %{buildroot}/opt/imageTailor/custom/cfg_*/usr_install/hook/after_setup_os_hook/S00setcap
+chmod 640 %{buildroot}/opt/imageTailor/custom/cfg_*/usr_install/all/addonscript/after_inssucc_hook/*
 
-chmod 600 %{buildroot}/opt/imageTailor/custom/cfg_*/cmd.conf
-chmod 600 %{buildroot}/opt/imageTailor/custom/cfg_*/rpm.conf
+# for user config
+chmod 640 %{buildroot}/opt/imageTailor/custom/cfg_*/usr_install/conf/*
+chmod 640 %{buildroot}/opt/imageTailor/custom/cfg_*/cmd.conf
+chmod 640 %{buildroot}/opt/imageTailor/custom/cfg_*/rpm.conf
 chmod 600 %{buildroot}/opt/imageTailor/custom/cfg_*/security_s.conf
-chmod 600 %{buildroot}/opt/imageTailor/custom/cfg_*/sys.conf
+chmod 640 %{buildroot}/opt/imageTailor/custom/cfg_*/sys.conf
 
-chmod 500 %{buildroot}/opt/imageTailor/kiwi/hook/config.sh
-chmod 500 %{buildroot}/opt/imageTailor/kiwi/hook/images.sh
-chmod 500 %{buildroot}/opt/imageTailor/mkdliso
+# for execute scripts
+chmod 550 %{buildroot}/opt/imageTailor/kiwi/hook/config.sh
+chmod 550 %{buildroot}/opt/imageTailor/kiwi/hook/images.sh
+chmod 550 %{buildroot}/opt/imageTailor/mkdliso
 
 cd -
 
@@ -57,6 +60,21 @@ rm -rf %{_tmppath}/%{name}-%{version}
 rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 %changelog
+* Mon Mar 28 2022 xinsheng<xinsheng3@huawei.com> - 1.0.4-1
+- ID:NA
+- SUG:NA
+- DESC:add cache array for matching rpm
+
+* Mon Mar 21 2022 xinsheng<xinsheng3@huawei.com> - 1.0.3-1
+- ID:NA
+- SUG:NA
+- DESC:init openEuler file config
+
+* Wed Mar 16 2022 xinsheng<xinsheng3@huawei.com> - 1.0.2-1
+- ID:NA
+- SUG:NA
+- DESC:adapter keyword for openEuler
+
 * Thu Mar 03 2022 xinsheng<xinsheng3@huawei.com> - 1.0.1-1
 - ID:NA
 - SUG:NA
