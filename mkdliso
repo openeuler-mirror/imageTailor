@@ -356,7 +356,8 @@ Options:
 Example:
     command:
     ./mkdliso -p openEuler -c custom/cfg_openEuler --sec
-
+    ./mkdliso -p docker -c custom/cfg_docker
+    ./mkdliso -p EMB_rootfs -c custom/cfg_EMB_rootfs
     help:
     ./mkdliso -h
 -------------------------------------------------------------------------------------------------------------

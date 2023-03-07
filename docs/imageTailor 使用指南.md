@@ -156,7 +156,8 @@
    Example:
        command:
        ./mkdliso -p openEuler -c custom/cfg_openEuler --sec
-   
+       ./mkdliso -p docker -c custom/cfg_docker
+       ./mkdliso -p EMB_rootfs -c custom/cfg_EMB_rootfs
        help:
        ./mkdliso -h
    -------------------------------------------------------------------------------------------------------------
@@ -165,6 +166,8 @@
 ### 目录介绍
 
 imageTailor 工具安装完成后，工具包的目录结构如下：
+
+openEuler产品：
 
 ```shell
 [imageTailor]
@@ -175,6 +178,44 @@ imageTailor 工具安装完成后，工具包的目录结构如下：
                 |-[all]
                 |-[conf]
                 |-[hook]
+            |-[cmd.conf]            // 配置 ISO 镜像默认使用的命令和库
+            |-[rpm.conf]            // 配置 ISO 镜像默认安装的 RPM 包和驱动列表
+            |-[security_s.conf]     // 配置安全加固策略
+            |-[sys.conf]            // 配置 ISO 镜像系统参数
+    |-[kiwi]                        // imageTailor 基础配置
+    |-[repos]                       // RPM 源，制作 ISO 镜像需要的 RPM 包
+    |-[security-tool]               // 安全加固工具
+    |-mkdliso                       // 制作 ISO 镜像的可执行脚本
+```
+
+docker产品：
+
+```shell
+[imageTailor]
+    |-[custom]
+        |-[cfg_docker]
+            |-[config.xml]          // 配置 ISO 镜像默认安装的 RPM 包和源等配置
+            |-[env.pm]
+            |-[group]
+            |-[images.sh]           // 裁剪定制脚本
+            |-[passwd]
+    |-[kiwi]                        // imageTailor 基础配置
+    |-[repos]                       // RPM 源，制作 ISO 镜像需要的 RPM 包
+    |-[security-tool]               // 安全加固工具
+    |-mkdliso                       // 制作 ISO 镜像的可执行脚本
+```
+
+EMB_rootfs产品：
+
+```shell
+[imageTailor]
+    |-[custom]
+        |-[cfg_EMB_rootfs]
+            |-[usr_install]         // 存放用户的 hook 脚本
+                |-[conf]
+                    |-[isopackage.sdf]
+                    |-[menu.lst]
+                    |-[modules]
             |-[cmd.conf]            // 配置 ISO 镜像默认使用的命令和库
             |-[rpm.conf]            // 配置 ISO 镜像默认安装的 RPM 包和驱动列表
             |-[security_s.conf]     // 配置安全加固策略
@@ -367,7 +408,7 @@ imageTailor 工具安装完成后，工具包的目录结构如下：
 
 #### 添加 hook 脚本
 
-hook 脚本由 OS 在启动和安装过程中调用，执行脚本中定义的动作。imageTailor 工具存放 hook 脚本的目录为 custom/cfg_openEuler/usr_install/hook，且其下有不同子目录，每个子目录代表 OS 启动或安装的不同阶段，用户根据脚本需要被调用的阶段存放，OS 会在对应阶段调用该脚本。用户可以根据需要存放自定义脚本到指定目录。
+hook 脚本由 OS 在启动和安装过程中调用，执行脚本中定义的动作。imageTailor 工具存放 hook 脚本的目录为 custom/cfg_openEuler/usr_install/hook，且其下有不同子目录，每个子目录代表 OS 启动或安装的不同阶段，用户根据脚本需要被调用的阶段存放，OS 会在对应阶段调用该脚本。用户可以根据需要存放自定义脚本到指定目录。docker产品不支持添加hook脚本。
 
 ##### **脚本命名规则**
 
@@ -400,7 +441,7 @@ hook 脚本由 OS 在启动和安装过程中调用，执行脚本中定义的�
 
 #### 配置主机参数
 
- /opt/imageTailor/custom/cfg_openEuler/sys.conf 文件的 \<sysconfig> \</sysconfig> 区域用于配置系统的常用参数，例如主机名、内核启动参数等。
+ /opt/imageTailor/custom/cfg_openEuler/sys.conf 文件的 \<sysconfig> \</sysconfig> 区域用于配置系统的常用参数，例如主机名、内核启动参数等。docker产品不支持。
 
 openEuler 提供的默认配置如下，用户可以需要进行修改：
 
@@ -506,7 +547,7 @@ openEuler 提供的默认配置如下，用户可以需要进行修改：
 
 #### 配置初始密码
 
-操作系统安装时，必须具有 root 初始密码和 grub 初始密码，否则裁剪得到的 ISO 在安装后无法使用 root 账号进行登录。本节介绍配置初始密码的方法。
+操作系统安装时，必须具有 root 初始密码和 grub 初始密码，否则裁剪得到的 ISO 在安装后无法使用 root 账号进行登录。本节介绍配置初始密码的方法。docker产品不支持。
 
 > ![](./public_sys-resources/icon-note.gif)说明：
 >
@@ -621,7 +662,7 @@ grub 初始密码保存在 /opt/imageTailor/custom/cfg_openEuler/usr_file/etc/de
 
 #### 配置分区
 
-若用户想调整系统分区或业务分区，可以通过修改 /opt/imageTailor/custom/cfg_openEuler/sys.conf 文件中的 \<HDpartitions> 实现。
+若用户想调整系统分区或业务分区，可以通过修改 /opt/imageTailor/custom/cfg_openEuler/sys.conf 文件中的 \<HDpartitions> 实现。docker产品不支持。
 
 >![](./public_sys-resources/icon-note.gif) **说明：**
 >
@@ -699,7 +740,7 @@ hd0    /home        max       logical     ext4
 
 #### 配置网络
 
-系统网络参数保存在 /opt/imageTailor/custom/cfg_openEuler/sys.conf 中，用户可以通过该文件的\<netconfig-*x*>\</netconfig-*x*> 配置修改目标 ISO 镜像的网络参数，例如：网卡名称、IP地址、子网掩码。
+系统网络参数保存在 /opt/imageTailor/custom/cfg_openEuler/sys.conf 中，用户可以通过该文件的\<netconfig-*x*>\</netconfig-*x*> 配置修改目标 ISO 镜像的网络参数，例如：网卡名称、IP地址、子网掩码。docker产品不支持。
 
 sys.conf 中默认的网络配置如下，其中 netconfig-0 代表网卡 eth0。如果需要配置多块网卡，例如eth1，请在配置文件中增加 \<netconfig-1>\</netconfig-1>，并在其中填写网卡 eth1 的各项参数。
 
@@ -726,7 +767,9 @@ STARTMODE="auto"
 
 #### 配置内核参数
 
-为了系统能够更稳定高效地运行，用户可以根据需要修改内核命令行参数。imageTailor 工具制作的 OS 镜像，可以通过修改 /opt/imageTailor/custom/cfg_openEuler/usr_file/etc/default/grub 中的 GRUB_CMDLINE_LINUX 配置实现内核命令行参数修改。 GRUB_CMDLINE_LINUX 中内核命令行参数的默认配置如下：
+为了系统能够更稳定高效地运行，用户可以根据需要修改内核命令行参数。imageTailor 工具制作的 OS 镜像，可以通过修改 /opt/imageTailor/custom/cfg_openEuler/usr_file/etc/default/grub 中的 GRUB_CMDLINE_LINUX 配置实现内核命令行参数修改。 docker产品和EMB_rootfs产品不支持。
+
+GRUB_CMDLINE_LINUX 中内核命令行参数的默认配置如下：
 
 ```shell
 GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0 crashkernel=512M oops=panic softlockup_panic=1 reserve_kbox_mem=16M crash_kexec_post_notifiers panic=3 console=tty0"
@@ -770,14 +813,14 @@ GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0 crashkernel=512M oops=panic soft
 
 ##### 命令格式
 
-**mkdliso -p openEuler -c custom/cfg_openEuler [--minios yes|no|force] [--sec] [-h]**
+**mkdliso [-p openEuler|docker|EMB_rootfs] [-c custom/cfg_openEuler|custom/cfg_docker|custom/cfg_EMB_rootfs] [--minios yes|no|force] [--sec] [-h]**
 
 ##### 参数说明
 
 | 参数名称 | 是否必选 | 参数含义                                                     | 取值范围                                                     |
-| -------- | -------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| -p       | 是       | 设置产品名称                                                 | openEuler                                                    |
-| c        | 是       | 指定配置文件的相对路径                                       | custom/cfg_openEuler                                         |
+| -------- | -------- | ---------------------------------------------------------- | ------------------------------------------------------------ |
+| -p       | 是       | 设置产品名称                                                | openEuler | docker | EMB_rootfs                                 |
+| c        | 是       | 指定配置文件的相对路径                                       | custom/cfg_openEuler | custom/cfg_docker | custom/cfg_EMB_rootfs |
 | --minios | 否       | 制作在系统安装时进行系统引导的 initrd                        | 默认为 yes<br>yes：第一次执行命令时会制作 initrd，之后执行命令会判断 'usr_install/boot' <br>目录下是否存在 initrd（sha256 校验）。如果存在，就不重新制作 initrd，否则制作 initrd 。<br>no：不制作 initrd，采用原有方式，系统引导和运行使用的 initrd 相同。<br>force：强制制作 initrd，不管 'usr_install/boot' 目录下是否存在 initrd。 |
 | --sec    | 否       | 是否对生成的 ISO 进行安全加固<br>如果用户不输入该参数，则由此造成的安全风险由用户承担 | 无                                                           |
 | -h       | 否       | 获取帮助信息                                                 | 无                                                           |
@@ -795,9 +838,13 @@ GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0 crashkernel=512M oops=panic soft
 
    ```shell
    # sudo /opt/imageTailor/mkdliso -p openEuler -c custom/cfg_openEuler --sec
+   # sudo /opt/imageTailor/mkdliso -p docker -c custom/cfg_docker
+   # sudo /opt/imageTailor/mkdliso -p EMB_rootfs -c custom/cfg_EMB_rootfs
    ```
-   
-   命令执行完成后，制作出的新文件在 /opt/imageTailor/result/{日期} 目录下，包括 openEuler-aarch64.iso 和 openEuler-aarch64.iso.sha256 。
+   命令执行完成后，制作出的新文件在 /opt/imageTailor/result/{日期} 目录下，包括 
+    openEuler产品：openEuler-aarch64.iso 和 openEuler-aarch64.iso.sha256 
+    EMB_rootfs产品：openEuler-image-qemu-*.rootfs.cpio.gz 和 openEuler-image-qemu-*.rootfs.cpio.gz.sha256
+    docker产品：docker.*.tar.xz 和 docker.*.tar.xz.sha256sum 和 docker_source.rpmlist 和 docker_binary.rpmlist
    
 2. 验证 ISO 镜像文件的完整性。此处假设日期为 2022-03-21-14-48 。
 
@@ -900,6 +947,7 @@ Pacific/  zone.tab
 
    以下 ${pwd} 的实际内容请参见 [配置初始密码](#配置初始密码) 章节生成并替换。
 
+   openEuler:
    ```shell
    $ cd /opt/imageTailor/
    $ sudo vi custom/cfg_openEuler/usr_file/etc/default/grub
@@ -916,8 +964,22 @@ Pacific/  zone.tab
    </users>
    ```
 
+   docker:
+   无grub/root 密码
+
+   EMB_rootfs:
+   ```shell
+   $ cd /opt/imageTailor/
+   $ sudo vi custom/cfg_EMB_rootfs/rpm.conf
+   <users group="root">
+       <user pwd="${pwd2}" home="/root" name="root"/>
+   </users>
+   ```
+
+
 6. 执行裁剪命令。
 
+  openEuler:
    ```shell
    $ sudo rm -rf /opt/imageTailor/result
    $ sudo ./mkdliso -p openEuler -c custom/cfg_openEuler --minios force
@@ -928,6 +990,31 @@ Pacific/  zone.tab
    total 889M
    -rw-r--r--. 1 root root 889M Mar  9 15:32 openEuler-aarch64.iso
    -rw-r--r--. 1 root root   87 Mar  9 15:32 openEuler-aarch64.iso.sha256
+    ```
+
+  docker:
+   ```shell
+   $ sudo rm -rf /opt/imageTailor/result
+   $ sudo ./mkdliso -p docker -c custom/cfg_docker
+   ......
+   Complete release iso file at: result/2023-03-09-15-31/docker.aarch64.tar.xz
+   move all mkdliso log file to result/log/sys_custom_log_20230309153231.tar.gz
+   $ ls result/2023-03-09-15-31/
+   docker.aarch64.tar.xz
+   docker_binary.rpmlist
+   docker_source.rpmlist
+   docker.aarch64.tar.xz.sha256sum
    ```
 
+  EMB_rootfs:
+   ```shell
+   $ sudo rm -rf /opt/imageTailor/result
+   $ sudo ./mkdliso -p EMB_rootfs -c custom/cfg_EMB_rootfs
+   ......
+   Complete release iso file at: result/2023-02-20-18-13/openEuler-image-qemu-aarch64-20230220181343.rootfs.cpio.gz
+   move all mkdliso log file to result/log/sys_custom_log_20230220181343.tar.gz
+   $ ls result/2023-02-20-18-13/
+   openEuler-image-qemu-aarch64-20230220181343.rootfs.cpio.gz
+   openEuler-image-qemu-aarch64-20230220181343.rootfs.cpio.gz.sha256
+   ```
 
