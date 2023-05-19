@@ -2,7 +2,7 @@ Name:         imageTailor
 Summary:      Cut out the ISO
 License:      Mulan PSL v2
 Group:        System/Management
-Version:      1.0.4
+Version:      2.0.0
 Release:      1
 BuildRoot:    %{_tmppath}/%{name}-%{version}
 Source:       https://gitee.com/openeuler/imageTailor/repository/archive/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
@@ -38,6 +38,13 @@ chmod 550 %{buildroot}/opt/imageTailor/kiwi/hook/config.sh
 chmod 550 %{buildroot}/opt/imageTailor/kiwi/hook/images.sh
 chmod 550 %{buildroot}/opt/imageTailor/mkdliso
 
+chmod 550 %{buildroot}/opt/imageTailor/custom/cfg_qcow2/bin/*
+chmod 550 %{buildroot}/opt/imageTailor/custom/cfg_qcow2/lib/*
+chmod 550 %{buildroot}/opt/imageTailor/custom/cfg_qcow2/misc/*
+chmod 550 %{buildroot}/opt/imageTailor/custom/cfg_qcow2/hooks/*/*
+chmod 640 %{buildroot}/opt/imageTailor/custom/cfg_qcow2/config/*
+chmod 640 %{buildroot}/opt/imageTailor/custom/cfg_qcow2/template/*
+
 cd -
 
 %pre
@@ -60,6 +67,11 @@ rm -rf %{_tmppath}/%{name}-%{version}
 rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 %changelog
+* Fri May 19 2023 chenhuihan <chenhuihan@huawei.com> - 2.0.0-1
+- ID:NA
+- SUG:NA
+- DESC: support qcow2
+
 * Mon Mar 28 2022 xinsheng<xinsheng3@huawei.com> - 1.0.4-1
 - ID:NA
 - SUG:NA
