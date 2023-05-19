@@ -1,0 +1,35 @@
+:<<!
+ * Copyright (c) Huawei Technologies Co., Ltd. 2018-2023. All rights reserved.
+ * oemaker licensed under the Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
+ * PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ * Author:
+ * Create: 2023-05-05
+ * Description: provide qcow2 set_rootpwd
+!
+
+#!/bin/bash
+
+if [ ${DEBUG_TRACE:-1} -gt 0 ]; then
+    set -x
+fi
+set -eu
+set -o pipefail
+set -x
+
+function set_rootpwd () {
+    str=`sed -n '/^root:/p' /etc/shadow | awk -F "root:" '{print $2}'`
+    mv /etc/shadow /etc/shadow_bak
+    sed -i '/^root:/d' /etc/shadow_bak
+    echo "root:"${ROOT_PWD}${str:1} > /etc/shadow
+    cat /etc/shadow_bak >> /etc/shadow
+    rm -rf /etc/shadow_bak
+    chmod 000 /etc/shadow
+}
+
+set_rootpwd

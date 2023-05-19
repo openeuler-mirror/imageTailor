@@ -2405,6 +2405,34 @@ function make_docker_image() {
     return 0
 }
 
+######################
+# 功能: 制作qcow2镜像
+# 规则：
+# 1、准备环境
+# 2、制作镜像
+# 3、生成附带信息文件
+######################
+function make_qcow2_image() {
+    repo_params=""
+    repo_config=$(cat ${SYS_CUSTOM_CONF_PATH}/config/repo)
+    pwd_config=$(cat ${SYS_CUSTOM_CONF_PATH}/config/root_pwd)
+    for repo_url in ${repo_config}
+    do
+        repo_params="${repo_params} -r ${repo_url}"
+    done
+    sh ${SYS_CUSTOM_CONF_PATH}/bin/create-image ${repo_params} -n ${PRODUCT_NAME} -p ${pwd_config}
+    if [ $? -ne 0 ];then
+        log_error "Failed on build qcow2 image" &> /dev/null
+        return 1
+    fi
+
+    sha256sum "${PRODUCT_NAME}.img" > "${PRODUCT_NAME}.img.sha256sum"
+    copy_file_to_result "${PRODUCT_NAME}.img" "${PRODUCT_NAME}.img.sha256sum"
+    echo "create ${PRODUCT_NAME} success"
+    rm -rf "${PRODUCT_NAME}.img" "${PRODUCT_NAME}.img.sha256sum"
+    return 0
+}
+
 #########################################################
 # 功能：裁剪入口
 # 规则：
@@ -2475,6 +2503,25 @@ fn_make_iso_docker() {
 }
 
 #########################################################
+# 功能：制作镜像入口
+# 规则：
+# 1、校验入参格式
+# 2、制作qcow2镜像
+#########################################################
+fn_make_iso_qcow2() {
+  fn_check_docker_input "$@"
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+
+  make_qcow2_image
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+  return 0
+}
+
+#########################################################
 # 功能：主入口
 # 规则：
 # 1、root用户+单进程执行
@@ -2514,6 +2561,11 @@ function fn_main() {
 
   if [ $PRODUCT_NAME = "docker" ];then
     fn_make_iso_docker "$@"
+    if [ $? -ne 0 ]; then
+      return 1
+    fi
+  elif [ $PRODUCT_NAME = "qcow2" ];then
+    fn_make_iso_qcow2 "$@"
     if [ $? -ne 0 ]; then
       return 1
     fi
