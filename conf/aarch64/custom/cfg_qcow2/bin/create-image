@@ -211,13 +211,13 @@ sudo mv -t ${WORKSPACE_DIR}/mnt ${WORKSPACE_DIR}/built/* || true
 
 mount_dir
 run_hook_in_root finalise
-remove_env
+remove_workspace
 
 fstrim_mnt
 # Unmount and cleanup the /mnt and /build subdirectories, to save
 # space before converting the image to some other format.
 unmount_mnt
-remove_workspace
+remove_env
 /usr/sbin/losetup -D
 
 # All done
