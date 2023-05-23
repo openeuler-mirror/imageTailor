@@ -2,7 +2,7 @@ Name:         imageTailor
 Summary:      Cut out the ISO
 License:      Mulan PSL v2
 Group:        System/Management
-Version:      2.0.0
+Version:      2.0.1
 Release:      1
 BuildRoot:    %{_tmppath}/%{name}-%{version}
 Source:       https://gitee.com/openeuler/imageTailor/repository/archive/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
@@ -67,6 +67,11 @@ rm -rf %{_tmppath}/%{name}-%{version}
 rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 %changelog
+* Tue May 23 2023 chenhuihan <chenhuihan@huawei.com> - 2.0.1-1
+- ID:NA
+- SUG:NA
+- DESC: fix pwd
+
 * Fri May 19 2023 chenhuihan <chenhuihan@huawei.com> - 2.0.0-1
 - ID:NA
 - SUG:NA
