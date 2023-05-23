@@ -358,6 +358,7 @@ Example:
     ./mkdliso -p openEuler -c custom/cfg_openEuler --sec
     ./mkdliso -p docker -c custom/cfg_docker
     ./mkdliso -p EMB_rootfs -c custom/cfg_EMB_rootfs
+    ./mkdliso -p qcow2 -c custom/cfg_qcow2
     help:
     ./mkdliso -h
 -------------------------------------------------------------------------------------------------------------

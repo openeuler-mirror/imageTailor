@@ -101,6 +101,7 @@ function unmount_dir() {
 
     if [[ ! -d ${mount_dir} ]]; then
         echo "dir ${mount_dir} is not exist"
+        return 1
     fi
 
     local link_dir=$(readlink -e ${mount_dir})

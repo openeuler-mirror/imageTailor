@@ -158,6 +158,7 @@
        ./mkdliso -p openEuler -c custom/cfg_openEuler --sec
        ./mkdliso -p docker -c custom/cfg_docker
        ./mkdliso -p EMB_rootfs -c custom/cfg_EMB_rootfs
+       ./mkdliso -p qcow2 -c custom/cfg_qcow2
        help:
        ./mkdliso -h
    -------------------------------------------------------------------------------------------------------------
@@ -220,6 +221,30 @@ EMB_rootfs产品：
             |-[rpm.conf]            // 配置 ISO 镜像默认安装的 RPM 包和驱动列表
             |-[security_s.conf]     // 配置安全加固策略
             |-[sys.conf]            // 配置 ISO 镜像系统参数
+    |-[kiwi]                        // imageTailor 基础配置
+    |-[repos]                       // RPM 源，制作 ISO 镜像需要的 RPM 包
+    |-[security-tool]               // 安全加固工具
+    |-mkdliso                       // 制作 ISO 镜像的可执行脚本
+```
+
+qcow2产品：
+
+```shell
+[imageTailor]
+    |-[custom]
+        |-[cfg_qcow2]
+            |-[bin]                 // 命令脚本
+                |-[create-image]    // 镜像制作入口
+                |-[source_files]    // 脚本调用入口
+            |-[config]              // 配置
+                |-[grub.cfg]        // Grub配置
+                |-[repo]            // repo源
+                |-[root_pwd]        // root密钥
+                |-[rpmlist]         // 软件包列表
+            |-[hooks]               // hook脚本文件
+            |-[lib]                 // 通用脚本
+            |-[misc]                // 公共脚本
+            |-[template]            
     |-[kiwi]                        // imageTailor 基础配置
     |-[repos]                       // RPM 源，制作 ISO 镜像需要的 RPM 包
     |-[security-tool]               // 安全加固工具
@@ -767,7 +792,7 @@ STARTMODE="auto"
 
 #### 配置内核参数
 
-为了系统能够更稳定高效地运行，用户可以根据需要修改内核命令行参数。imageTailor 工具制作的 OS 镜像，可以通过修改 /opt/imageTailor/custom/cfg_openEuler/usr_file/etc/default/grub 中的 GRUB_CMDLINE_LINUX 配置实现内核命令行参数修改。 docker产品和EMB_rootfs产品不支持。
+为了系统能够更稳定高效地运行，用户可以根据需要修改内核命令行参数。imageTailor 工具制作的 OS 镜像，可以通过修改 /opt/imageTailor/custom/cfg_openEuler/usr_file/etc/default/grub 中的 GRUB_CMDLINE_LINUX 配置实现内核命令行参数修改。 docker产品、EMB_rootfs产品和qcow2产品不支持。
 
 GRUB_CMDLINE_LINUX 中内核命令行参数的默认配置如下：
 
@@ -813,14 +838,14 @@ GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0 crashkernel=512M oops=panic soft
 
 ##### 命令格式
 
-**mkdliso [-p openEuler|docker|EMB_rootfs] [-c custom/cfg_openEuler|custom/cfg_docker|custom/cfg_EMB_rootfs] [--minios yes|no|force] [--sec] [-h]**
+**mkdliso [-p openEuler|docker|EMB_rootfs|qcow2] [-c custom/cfg_openEuler|custom/cfg_docker|custom/cfg_EMB_rootfs|custom/cfg_qcow2] [--minios yes|no|force] [--sec] [-h]**
 
 ##### 参数说明
 
 | 参数名称 | 是否必选 | 参数含义                                                     | 取值范围                                                     |
-| -------- | -------- | ---------------------------------------------------------- | ------------------------------------------------------------ |
-| -p       | 是       | 设置产品名称                                                | openEuler | docker | EMB_rootfs                                 |
-| c        | 是       | 指定配置文件的相对路径                                       | custom/cfg_openEuler | custom/cfg_docker | custom/cfg_EMB_rootfs |
+| -------- | -------- | ------------------------------------------------------- | ------------------------------------------------------------ |
+| -p       | 是       | 设置产品名称                                                | openEuler | docker | EMB_rootfs | qcow2                    |
+| c        | 是       | 指定配置文件的相对路径                                       | custom/cfg_openEuler | custom/cfg_docker | custom/cfg_EMB_rootfs | custom/cfg_qcow2 |
 | --minios | 否       | 制作在系统安装时进行系统引导的 initrd                        | 默认为 yes<br>yes：第一次执行命令时会制作 initrd，之后执行命令会判断 'usr_install/boot' <br>目录下是否存在 initrd（sha256 校验）。如果存在，就不重新制作 initrd，否则制作 initrd 。<br>no：不制作 initrd，采用原有方式，系统引导和运行使用的 initrd 相同。<br>force：强制制作 initrd，不管 'usr_install/boot' 目录下是否存在 initrd。 |
 | --sec    | 否       | 是否对生成的 ISO 进行安全加固<br>如果用户不输入该参数，则由此造成的安全风险由用户承担 | 无                                                           |
 | -h       | 否       | 获取帮助信息                                                 | 无                                                           |
@@ -840,11 +865,13 @@ GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0 crashkernel=512M oops=panic soft
    # sudo /opt/imageTailor/mkdliso -p openEuler -c custom/cfg_openEuler --sec
    # sudo /opt/imageTailor/mkdliso -p docker -c custom/cfg_docker
    # sudo /opt/imageTailor/mkdliso -p EMB_rootfs -c custom/cfg_EMB_rootfs
+   # sudo /opt/imageTailor/mkdliso -p qcow2 -c custom/cfg_qcow2
    ```
    命令执行完成后，制作出的新文件在 /opt/imageTailor/result/{日期} 目录下，包括 
     openEuler产品：openEuler-aarch64.iso 和 openEuler-aarch64.iso.sha256 
     EMB_rootfs产品：openEuler-image-qemu-*.rootfs.cpio.gz 和 openEuler-image-qemu-*.rootfs.cpio.gz.sha256
     docker产品：docker.*.tar.xz 和 docker.*.tar.xz.sha256sum 和 docker_source.rpmlist 和 docker_binary.rpmlist
+    qcow2产品: qcow2.img 和 qcow2.img.sha256sum
    
 2. 验证 ISO 镜像文件的完整性。此处假设日期为 2022-03-21-14-48 。
 
@@ -975,6 +1002,13 @@ Pacific/  zone.tab
        <user pwd="${pwd2}" home="/root" name="root"/>
    </users>
    ```
+   
+   qcow2:
+   ```shell
+   $ cd /opt/imageTailor/
+   $ sudo vi custom/cfg_qcow2/config/root_pwd
+   ${pwd2}
+   ```
 
 
 6. 执行裁剪命令。
@@ -1018,3 +1052,13 @@ Pacific/  zone.tab
    openEuler-image-qemu-aarch64-20230220181343.rootfs.cpio.gz.sha256
    ```
 
+  qcow2:
+   ```shell
+   $ sudo rm -rf /opt/imageTailor/result
+   $ sudo ./mkdliso -p qcow2 -c custom/cfg_qcow2
+   ......
+   create qcow2 success
+   $ ls result/2023-05-23-15-29/
+   qcow2.img
+   qcow2.img.sha256sum
+   ```
