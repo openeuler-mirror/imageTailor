@@ -871,7 +871,7 @@ GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0 crashkernel=512M oops=panic soft
     openEuler产品：openEuler-aarch64.iso 和 openEuler-aarch64.iso.sha256 
     EMB_rootfs产品：openEuler-image-qemu-*.rootfs.cpio.gz 和 openEuler-image-qemu-*.rootfs.cpio.gz.sha256
     docker产品：docker.*.tar.xz 和 docker.*.tar.xz.sha256sum 和 docker_source.rpmlist 和 docker_binary.rpmlist
-    qcow2产品: qcow2.img 和 qcow2.img.sha256sum
+    qcow2产品: openEuler_{arch}.qcow2 和 openEuler_{arch}.qcow2.sha256sum
    
 2. 验证 ISO 镜像文件的完整性。此处假设日期为 2022-03-21-14-48 。
 
@@ -1059,6 +1059,6 @@ Pacific/  zone.tab
    ......
    create qcow2 success
    $ ls result/2023-05-23-15-29/
-   qcow2.img
-   qcow2.img.sha256sum
+   openEuler_aarch64.qcow2
+   openEuler_aarch64.qcow2.sha256sum
    ```

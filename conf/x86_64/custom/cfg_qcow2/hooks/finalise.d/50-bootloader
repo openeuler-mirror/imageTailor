@@ -48,6 +48,8 @@ function install_grub2 ()
     echo "EOF" >> /etc/grub.d/00_header
 
     grub2-mkconfig -o $GRUB_CFG
+    sed_str="root=UUID=${ROOT_FS_UUID}"
+    sed -i "s#root=/opt/imageTailor/.*.img#${sed_str}#g" $GRUB_CFG
 }
 
 function install_grub2_efi ()
@@ -72,6 +74,8 @@ function install_grub2_efi ()
     echo "EOF" >> /etc/grub.d/00_header
     GRUB_CFG=/boot/efi/EFI/openEuler/grub.cfg
     grub2-mkconfig -o $GRUB_CFG
+    sed_str="root=UUID=${ROOT_FS_UUID}"
+    sed -i "s#root=/opt/imageTailor/.*.img#${sed_str}#g" $GRUB_CFG
 }
 
 if [ -f /boot/grub2/device.map ]; then

@@ -168,6 +168,9 @@ elif [ $ARCH == "aarch64" ]; then
 fi
 
 export DEVICE=`losetup -f`
+num=$(echo $DEVICE | awk -F 'loop' '{print $2}')
+rm -rf "/dev/loop${num}"
+mknod $DEVICE b 7 $num
 /usr/sbin/losetup ${DEVICE} ${NAME}
 
 offset=`fdisk -l ${NAME} | grep "${NAME}1" | awk '{print $2}'`
@@ -178,6 +181,9 @@ offset=`echo "${offset}*512" | bc`
 if [ $ARCH == "aarch64" ]; then
 
     export BOOT=`losetup -f`
+    num=$(echo $BOOT | awk -F 'loop' '{print $2}')
+    rm -rf "/dev/loop${num}"
+    mknod $BOOT b 7 $num
     /usr/sbin/losetup -o ${offset} --sizelimit ${sizelimit} ${BOOT} ${NAME}
     /usr/sbin/mkfs.vfat $BOOT
 
@@ -189,6 +195,9 @@ if [ $ARCH == "aarch64" ]; then
 fi
 
 export ROOT=`losetup -f`
+num=$(echo $ROOT | awk -F 'loop' '{print $2}')
+rm -rf "/dev/loop${num}"
+mknod $ROOT b 7 $num
 export ROOT_FS_UUID=$(uuidgen -r)
 /usr/sbin/losetup -o ${offset} --sizelimit ${sizelimit} ${ROOT} ${NAME}
 /usr/sbin/mkfs.ext4 -L "rootfs" ${ROOT}
