@@ -2426,11 +2426,16 @@ function make_qcow2_image() {
         log_error "Failed on build qcow2 image" &> /dev/null
         return 1
     fi
-
-    sha256sum "${PRODUCT_NAME}.img" > "${PRODUCT_NAME}.img.sha256sum"
-    copy_file_to_result "${PRODUCT_NAME}.img" "${PRODUCT_NAME}.img.sha256sum"
+    qemu-img convert -f raw -O qcow2 "${PRODUCT_NAME}.img" "openEuler_${ISO_ARCH}.qcow2"
+    if [ $? -ne 0 ];then
+        log_error "Failed on convert img to qcow2" &> /dev/null
+        return 1
+    fi
+    rm -rf "${PRODUCT_NAME}.img"
+    sha256sum "openEuler_${ISO_ARCH}.qcow2" > "openEuler_${ISO_ARCH}.qcow2.sha256sum"
+    copy_file_to_result "openEuler_${ISO_ARCH}.qcow2" "openEuler_${ISO_ARCH}.qcow2.sha256sum"
     echo "create ${PRODUCT_NAME} success"
-    rm -rf "${PRODUCT_NAME}.img" "${PRODUCT_NAME}.img.sha256sum"
+    rm -rf "openEuler_${ISO_ARCH}.qcow2" "openEuler_${ISO_ARCH}.qcow2.sha256sum"
     return 0
 }
 
