@@ -3,15 +3,19 @@ Summary:      Cut out the ISO
 License:      Mulan PSL v2
 Group:        System/Management
 Version:      2.0.1
-Release:      1
+Release:      2
 BuildRoot:    %{_tmppath}/%{name}-%{version}
 Source:       https://gitee.com/openeuler/imageTailor/repository/archive/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
+
+Patch1:  openEuler-fixed-make-qcow2-in-docker.patch
+
 Requires:     dnf-utils tar python3 drpm genisoimage python3-kiwi kiwi-tools kiwi-systemdeps
 %description
 Dopralinux custom tool
 
 %prep
 %setup -c
+%autopatch -p1
 
 %install
 iso_arch=$(uname -m)
@@ -67,6 +71,11 @@ rm -rf %{_tmppath}/%{name}-%{version}
 rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 %changelog
+* Fri Jun 2 2023 chenhuihan <chenhuihan@huawei.com> - 2.0.1-2
+- ID:NA
+- SUG:NA
+- DESC: fixed make qcow2 in docker
+
 * Tue May 23 2023 chenhuihan <chenhuihan@huawei.com> - 2.0.1-1
 - ID:NA
 - SUG:NA
