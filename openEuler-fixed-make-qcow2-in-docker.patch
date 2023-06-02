@@ -1,0 +1,176 @@
+From 47df8ef9593ecaf23b84b15e4032557b8aff3005 Mon Sep 17 00:00:00 2001
+From: chenhuihan <chenhuihan@huawei.com>
+Date: Fri, 2 Jun 2023 10:08:18 +0800
+Subject: [PATCH] update
+
+---
+ .../conf/aarch64/custom/cfg_qcow2/bin/create-image   |  9 +++++++++
+ .../custom/cfg_qcow2/hooks/finalise.d/50-bootloader  |  4 ++++
+ .../conf/x86_64/custom/cfg_qcow2/bin/create-image    |  9 +++++++++
+ .../custom/cfg_qcow2/hooks/finalise.d/50-bootloader  |  4 ++++
+ ...4\275\277\347\224\250\346\214\207\345\215\227.md" |  6 +++---
+ imageTailor/mkdliso                                  | 12 +++++++++---
+ 6 files changed, 38 insertions(+), 6 deletions(-)
+
+diff --git a/imageTailor/conf/aarch64/custom/cfg_qcow2/bin/create-image b/imageTailor/conf/aarch64/custom/cfg_qcow2/bin/create-image
+index 49d9d6a..f9b6770 100644
+--- a/imageTailor/conf/aarch64/custom/cfg_qcow2/bin/create-image
++++ b/imageTailor/conf/aarch64/custom/cfg_qcow2/bin/create-image
+@@ -168,6 +168,9 @@ elif [ $ARCH == "aarch64" ]; then
+ fi
+ 
+ export DEVICE=`losetup -f`
++num=$(echo $DEVICE | awk -F 'loop' '{print $2}')
++rm -rf "/dev/loop${num}"
++mknod $DEVICE b 7 $num
+ /usr/sbin/losetup ${DEVICE} ${NAME}
+ 
+ offset=`fdisk -l ${NAME} | grep "${NAME}1" | awk '{print $2}'`
+@@ -178,6 +181,9 @@ offset=`echo "${offset}*512" | bc`
+ if [ $ARCH == "aarch64" ]; then
+ 
+     export BOOT=`losetup -f`
++    num=$(echo $BOOT | awk -F 'loop' '{print $2}')
++    rm -rf "/dev/loop${num}"
++    mknod $BOOT b 7 $num
+     /usr/sbin/losetup -o ${offset} --sizelimit ${sizelimit} ${BOOT} ${NAME}
+     /usr/sbin/mkfs.vfat $BOOT
+ 
+@@ -189,6 +195,9 @@ if [ $ARCH == "aarch64" ]; then
+ fi
+ 
+ export ROOT=`losetup -f`
++num=$(echo $ROOT | awk -F 'loop' '{print $2}')
++rm -rf "/dev/loop${num}"
++mknod $ROOT b 7 $num
+ export ROOT_FS_UUID=$(uuidgen -r)
+ /usr/sbin/losetup -o ${offset} --sizelimit ${sizelimit} ${ROOT} ${NAME}
+ /usr/sbin/mkfs.ext4 -L "rootfs" ${ROOT}
+diff --git a/imageTailor/conf/aarch64/custom/cfg_qcow2/hooks/finalise.d/50-bootloader b/imageTailor/conf/aarch64/custom/cfg_qcow2/hooks/finalise.d/50-bootloader
+index 2da4c0f..4883fa0 100644
+--- a/imageTailor/conf/aarch64/custom/cfg_qcow2/hooks/finalise.d/50-bootloader
++++ b/imageTailor/conf/aarch64/custom/cfg_qcow2/hooks/finalise.d/50-bootloader
+@@ -48,6 +48,8 @@ function install_grub2 ()
+     echo "EOF" >> /etc/grub.d/00_header
+ 
+     grub2-mkconfig -o $GRUB_CFG
++    sed_str="root=UUID=${ROOT_FS_UUID}"
++    sed -i "s#root=/opt/imageTailor/.*.img#${sed_str}#g" $GRUB_CFG
+ }
+ 
+ function install_grub2_efi ()
+@@ -72,6 +74,8 @@ function install_grub2_efi ()
+     echo "EOF" >> /etc/grub.d/00_header
+     GRUB_CFG=/boot/efi/EFI/openEuler/grub.cfg
+     grub2-mkconfig -o $GRUB_CFG
++    sed_str="root=UUID=${ROOT_FS_UUID}"
++    sed -i "s#root=/opt/imageTailor/.*.img#${sed_str}#g" $GRUB_CFG
+ }
+ 
+ if [ -f /boot/grub2/device.map ]; then
+diff --git a/imageTailor/conf/x86_64/custom/cfg_qcow2/bin/create-image b/imageTailor/conf/x86_64/custom/cfg_qcow2/bin/create-image
+index 49d9d6a..f9b6770 100644
+--- a/imageTailor/conf/x86_64/custom/cfg_qcow2/bin/create-image
++++ b/imageTailor/conf/x86_64/custom/cfg_qcow2/bin/create-image
+@@ -168,6 +168,9 @@ elif [ $ARCH == "aarch64" ]; then
+ fi
+ 
+ export DEVICE=`losetup -f`
++num=$(echo $DEVICE | awk -F 'loop' '{print $2}')
++rm -rf "/dev/loop${num}"
++mknod $DEVICE b 7 $num
+ /usr/sbin/losetup ${DEVICE} ${NAME}
+ 
+ offset=`fdisk -l ${NAME} | grep "${NAME}1" | awk '{print $2}'`
+@@ -178,6 +181,9 @@ offset=`echo "${offset}*512" | bc`
+ if [ $ARCH == "aarch64" ]; then
+ 
+     export BOOT=`losetup -f`
++    num=$(echo $BOOT | awk -F 'loop' '{print $2}')
++    rm -rf "/dev/loop${num}"
++    mknod $BOOT b 7 $num
+     /usr/sbin/losetup -o ${offset} --sizelimit ${sizelimit} ${BOOT} ${NAME}
+     /usr/sbin/mkfs.vfat $BOOT
+ 
+@@ -189,6 +195,9 @@ if [ $ARCH == "aarch64" ]; then
+ fi
+ 
+ export ROOT=`losetup -f`
++num=$(echo $ROOT | awk -F 'loop' '{print $2}')
++rm -rf "/dev/loop${num}"
++mknod $ROOT b 7 $num
+ export ROOT_FS_UUID=$(uuidgen -r)
+ /usr/sbin/losetup -o ${offset} --sizelimit ${sizelimit} ${ROOT} ${NAME}
+ /usr/sbin/mkfs.ext4 -L "rootfs" ${ROOT}
+diff --git a/imageTailor/conf/x86_64/custom/cfg_qcow2/hooks/finalise.d/50-bootloader b/imageTailor/conf/x86_64/custom/cfg_qcow2/hooks/finalise.d/50-bootloader
+index 2da4c0f..4883fa0 100644
+--- a/imageTailor/conf/x86_64/custom/cfg_qcow2/hooks/finalise.d/50-bootloader
++++ b/imageTailor/conf/x86_64/custom/cfg_qcow2/hooks/finalise.d/50-bootloader
+@@ -48,6 +48,8 @@ function install_grub2 ()
+     echo "EOF" >> /etc/grub.d/00_header
+ 
+     grub2-mkconfig -o $GRUB_CFG
++    sed_str="root=UUID=${ROOT_FS_UUID}"
++    sed -i "s#root=/opt/imageTailor/.*.img#${sed_str}#g" $GRUB_CFG
+ }
+ 
+ function install_grub2_efi ()
+@@ -72,6 +74,8 @@ function install_grub2_efi ()
+     echo "EOF" >> /etc/grub.d/00_header
+     GRUB_CFG=/boot/efi/EFI/openEuler/grub.cfg
+     grub2-mkconfig -o $GRUB_CFG
++    sed_str="root=UUID=${ROOT_FS_UUID}"
++    sed -i "s#root=/opt/imageTailor/.*.img#${sed_str}#g" $GRUB_CFG
+ }
+ 
+ if [ -f /boot/grub2/device.map ]; then
+diff --git "a/imageTailor/docs/imageTailor \344\275\277\347\224\250\346\214\207\345\215\227.md" "b/imageTailor/docs/imageTailor \344\275\277\347\224\250\346\214\207\345\215\227.md"
+index 72a989e..2103d2e 100644
+--- "a/imageTailor/docs/imageTailor \344\275\277\347\224\250\346\214\207\345\215\227.md"	
++++ "b/imageTailor/docs/imageTailor \344\275\277\347\224\250\346\214\207\345\215\227.md"	
+@@ -871,7 +871,7 @@ GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0 crashkernel=512M oops=panic soft
+     openEuler产品：openEuler-aarch64.iso 和 openEuler-aarch64.iso.sha256 
+     EMB_rootfs产品：openEuler-image-qemu-*.rootfs.cpio.gz 和 openEuler-image-qemu-*.rootfs.cpio.gz.sha256
+     docker产品：docker.*.tar.xz 和 docker.*.tar.xz.sha256sum 和 docker_source.rpmlist 和 docker_binary.rpmlist
+-    qcow2产品: qcow2.img 和 qcow2.img.sha256sum
++    qcow2产品: openEuler_{arch}.qcow2 和 openEuler_{arch}.qcow2.sha256sum
+    
+ 2. 验证 ISO 镜像文件的完整性。此处假设日期为 2022-03-21-14-48 。
+ 
+@@ -1059,6 +1059,6 @@ Pacific/  zone.tab
+    ......
+    create qcow2 success
+    $ ls result/2023-05-23-15-29/
+-   qcow2.img
+-   qcow2.img.sha256sum
++   openEuler_aarch64.qcow2
++   openEuler_aarch64.qcow2.sha256sum
+    ```
+diff --git a/imageTailor/mkdliso b/imageTailor/mkdliso
+index ae9a9f4..5c24e34 100644
+--- a/imageTailor/mkdliso
++++ b/imageTailor/mkdliso
+@@ -2426,11 +2426,17 @@ function make_qcow2_image() {
+         log_error "Failed on build qcow2 image" &> /dev/null
+         return 1
+     fi
++    qemu-img convert -f raw -O qcow2 "${PRODUCT_NAME}.img" "openEuler_${ISO_ARCH}.qcow2"
++    if [ $? -ne 0 ];then
++        log_error "Failed on convert img to qcow2" &> /dev/null
++        return 1
++    fi
++    rm -rf "${PRODUCT_NAME}.img"
++    sha256sum "openEuler_${ISO_ARCH}.qcow2" > "openEuler_${ISO_ARCH}.qcow2.sha256sum"
++    copy_file_to_result "openEuler_${ISO_ARCH}.qcow2" "openEuler_${ISO_ARCH}.qcow2.sha256sum"
+ 
+-    sha256sum "${PRODUCT_NAME}.img" > "${PRODUCT_NAME}.img.sha256sum"
+-    copy_file_to_result "${PRODUCT_NAME}.img" "${PRODUCT_NAME}.img.sha256sum"
+     echo "create ${PRODUCT_NAME} success"
+-    rm -rf "${PRODUCT_NAME}.img" "${PRODUCT_NAME}.img.sha256sum"
++    rm -rf "openEuler_${ISO_ARCH}.qcow2" "openEuler_${ISO_ARCH}.qcow2.sha256sum"
+     return 0
+ }
+ 
+-- 
+2.33.0
+
