@@ -251,6 +251,29 @@ qcow2产品：
     |-mkdliso                       // 制作 ISO 镜像的可执行脚本
 ```
 
+raspberryPi产品：
+
+```shell
+[imageTailor]
+    |-[custom]
+        |-[cfg_raspi]
+            |-[config]                                // 配置
+                |-[99-com.rules]                      // 规则配置
+                |-[chroot.sh]                         // 密码/时区/编码格式等配置
+                |-[config.txt]                        // 尺寸配置
+                |-[extend-root.sh]                    // 磁盘分区配置
+                |-[ifcfg-eth0]                        // 网卡配置
+                |-[LICENCE.raspberrypi-sys-mods]      // 证书
+                |-[openeuler.repo]                    // repo源配置
+                |-[pi_pwd]                            // pi用户密码
+                |-[root_pwd]                          // root用户密码
+                |-[rpmlist]                           // rpm包列表
+    |-[kiwi]                        // imageTailor 基础配置
+    |-[repos]                       // RPM 源，制作 ISO 镜像需要的 RPM 包
+    |-[security-tool]               // 安全加固工具
+    |-mkdliso                       // 制作 ISO 镜像的可执行脚本
+```
+
 ## 定制系统
 
 本章介绍使用 imageTailor 工具将业务 RPM 包、自定义文件、驱动、命令和文件打包至目标 ISO 镜像。
@@ -866,13 +889,15 @@ GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0 crashkernel=512M oops=panic soft
    # sudo /opt/imageTailor/mkdliso -p docker -c custom/cfg_docker
    # sudo /opt/imageTailor/mkdliso -p EMB_rootfs -c custom/cfg_EMB_rootfs
    # sudo /opt/imageTailor/mkdliso -p qcow2 -c custom/cfg_qcow2
+   # sudo /opt/imageTailor/mkdliso -p raspi -c custom/cfg_raspi
    ```
    命令执行完成后，制作出的新文件在 /opt/imageTailor/result/{日期} 目录下，包括 
     openEuler产品：openEuler-aarch64.iso 和 openEuler-aarch64.iso.sha256 
     EMB_rootfs产品：openEuler-image-qemu-*.rootfs.cpio.gz 和 openEuler-image-qemu-*.rootfs.cpio.gz.sha256
     docker产品：docker.*.tar.xz 和 docker.*.tar.xz.sha256sum 和 docker_source.rpmlist 和 docker_binary.rpmlist
     qcow2产品: openEuler_{arch}.qcow2 和 openEuler_{arch}.qcow2.sha256sum
-   
+    raspi产品：raspi-aarch64.img、rasp-aarch64.img.xz以及对应的sha256sum
+
 2. 验证 ISO 镜像文件的完整性。此处假设日期为 2022-03-21-14-48 。
 
    ```shell
@@ -1009,6 +1034,16 @@ Pacific/  zone.tab
    $ sudo vi custom/cfg_qcow2/config/root_pwd
    ${pwd2}
    ```
+   
+   raspi:
+   ```shell
+   $ cd /opt/imageTailor/
+   $ sudo vi custom/cfg_raspi/config/root_pwd
+   ${pwd2}
+   $ sudo vi custom/cfg_raspi/config/pi_pwd
+   ${pwd2}
+   ```
+
 
 
 6. 执行裁剪命令。
@@ -1061,4 +1096,17 @@ Pacific/  zone.tab
    $ ls result/2023-05-23-15-29/
    openEuler_aarch64.qcow2
    openEuler_aarch64.qcow2.sha256sum
+   ```
+
+  raspi:
+   ```shell
+   $ sudo rm -rf /opt/imageTailor/result
+   $ sudo ./mkdliso -p raspi -c custom/cfg_raspi
+   ......
+   make raspi img success
+   $ ls result/2023-06-06-15-29/
+   raspi-aarch64.img
+   raspi-aarch64.img.sha256sum
+   raspi-aarch64.img.xz
+   raspi-aarch64.img.xz.sha256sum
    ```
