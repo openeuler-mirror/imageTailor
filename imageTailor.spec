@@ -3,16 +3,17 @@ Summary:      Cut out the ISO
 License:      Mulan PSL v2
 Group:        System/Management
 Version:      1.0.4
-Release:      1
+Release:      2
 BuildRoot:    %{_tmppath}/%{name}-%{version}
 Source:       https://gitee.com/openeuler/imageTailor/repository/archive/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
+Patch0:       add-riscv64-support.patch
 Requires:     dnf-utils tar python3 drpm genisoimage python3-kiwi kiwi-tools kiwi-systemdeps
 %description
 Dopralinux custom tool
 
 %prep
 %setup -c
-
+%autopatch -p1
 %install
 iso_arch=$(uname -m)
 mkdir -p %{buildroot}/opt/imageTailor
@@ -60,6 +61,11 @@ rm -rf %{_tmppath}/%{name}-%{version}
 rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 %changelog
+* Mon Jul 17 2023 zhangxiang <zhangxiang@iscas.ac.cn> - 1.0.4-2
+- ID:NA
+- SUG:NA
+- DESC: add riscv64 support
+
 * Mon Mar 28 2022 xinsheng<xinsheng3@huawei.com> - 1.0.4-1
 - ID:NA
 - SUG:NA
