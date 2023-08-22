@@ -1,0 +1,15 @@
+NetworkManager
+bc
+dnf
+haveged
+hostname
+iproute
+iputils
+net-tools
+passwd
+raspberrypi-bluetooth
+raspberrypi-firmware
+raspberrypi-kernel
+sudo
+systemd-timesyncd
+vim-minimal

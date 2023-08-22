@@ -137,6 +137,41 @@ MYISO_RESULT="$MKISO_WORKSPACE/sys_custom-result_$$"
 CD="$MYISO_RESULT/cd_root"
 
 #########################################################
+#########################################################
+## 普通日志/文件日志模块 ##
+
+log_info() {
+    msg=$1
+    echo "[INFO] ${msg}"
+}
+
+log_warn() {
+    msg=$1
+    echo "[WARN] ${msg}"
+}
+
+log_error() {
+    msg=$1
+    echo "[ERROR] ${msg}"
+}
+
+#########################################################
+BUILD_TIME=$(date +%Y-%m-%d-%H-%M)
+LOG_DIR="${CURRENT_PATH}/result/${BUILD_TIME}"
+
+log_file_info() {
+  echo $(date) - [INFO] $* | tee -a ${LOG_DIR}/sys_custom.log
+}
+
+log_file_warn() {
+  echo $(date) - [WARN] $* | tee -a ${LOG_DIR}/sys_custom.log
+}
+
+log_file_error() {
+  echo $(date) - [ERROR] $* | tee -a ${LOG_DIR}/sys_custom.log
+}
+
+#########################################################
 # 功能：将initrd/linux目录建立软链接后打成os_release.tgz
 # 规则：内部功能
 #########################################################
@@ -343,6 +378,11 @@ function make_iso_server() {
 # 功能：显示帮助信息
 #########################################################
 function fn_usage() {
+  raspi_info=""
+  if [ "${ISO_ARCH}" == "aarch64" ]; then
+     raspi_info="./mkdliso -p raspi -c custom/cfg_raspi" # only support aarch64
+  fi
+
   cat <<EOF
 -------------------------------------------------------------------------------------------------------------
 Usage: mkdliso -p product_name -c configpath [--minios yes|no|force] [-h] [--sec]
@@ -359,6 +399,8 @@ Example:
     ./mkdliso -p docker -c custom/cfg_docker
     ./mkdliso -p EMB_rootfs -c custom/cfg_EMB_rootfs
     ./mkdliso -p qcow2 -c custom/cfg_qcow2
+    ${raspi_info}
+
     help:
     ./mkdliso -h
 -------------------------------------------------------------------------------------------------------------
@@ -630,7 +672,7 @@ function check_product() {
 
   echo "${AVAIL_PRODUCT_NAME[*]}" | grep -w "${product_name}" >/dev/null 2>&1
   if [ $? -ne 0 ]; then
-    echo "error: product_name not config, see ${PRODUCT_CONF}"
+    log_error "product_name not config, see ${PRODUCT_CONF}"
     return 1
   fi
 
@@ -2173,7 +2215,7 @@ function fn_check_pwd {
     echo "error: password config is empty, please check pwd config in file ${rpm_pwd_path}"
     return 1
   fi
-  
+
   minios_pwd_path="${KIWI_MINIOS}/cfg_minios/rpm.conf"
   minios_cfg_path="kiwi/eulerkiwi/minios.conf"
   if [[ $(grep -c "\<${PRODUCT_NAME}.*" ${minios_cfg_path}) -ne 0 ]]; then
@@ -2195,12 +2237,12 @@ function fn_verify_product_name() {
   local input_param=$@
 
   if [ $# -lt 1 ]; then
-    echo "error: missing param, please check it"
+    log_error "missing param, please check it"
     exit 1
   fi
 
   if [ -z "$(echo "$input_param" | grep -w "\-p")" -a -z "$(echo $input_param | grep -w "\-\-product")" -a $# -gt 1 ]; then
-    echo "error: missing param -p or --product"
+    log_error "missing param -p or --product"
     exit 1
   fi
 
@@ -2228,7 +2270,7 @@ function fn_verify_product_name() {
       shift 1
       ;;
     *)
-      echo "error: params is invalid, please check it."
+      log_error "params is invalid, please check it."
       exit 1
       ;;
     esac
@@ -2244,41 +2286,46 @@ function fn_verify_product_name() {
 # 2、-p/--product 和 -c/-cfg-path 参数必选
 # 3、对参数进行枚举和功能校验，不允许出现例外参数
 #########################################################
-function fn_check_docker_input() {
+function fn_check_input() {
   local input_param=$@
 
   if [ $# -lt 1 ]; then
-    echo "error: missing param, please check it"
+    log_error "missing param, please check it"
     exit 1
   fi
 
   if [ -z "$(echo "$input_param" | grep -w "\-c")" -a -z "$(echo $input_param | grep -w "\-\-cfg\-path")" -a $# -gt 1 ]; then
-    echo "error: missing param -c or --cfg-path"
+    log_error "missing param -c or --cfg-path"
     exit 1
   fi
 
   while [ $# -ge 1 ]; do
     case "$1" in
     -p | --product)
+      PRODUCT_NAME=$2
       shift 2
       ;;
+
     -c | --cfg-path)
-      check_docker_cfgpath $2
-      if [ $? -eq 0 ]; then
-        shift 2
-      else
+      local cfgpath=$2
+      if [ ! -d "$cfgpath" ]; then
+        log_error "cfgpath[${cfgpath}] must be a directory"
         exit 1
+      else
+        SYS_CUSTOM_CONF_PATH=${cfgpath}
+        shift 2
       fi
       ;;
+
     *)
-      echo "error: params is invalid, please check it."
+      log_error "params is invalid, please check it."
       exit 1
       ;;
     esac
   done
 
   if [ -z "$SYS_CUSTOM_CONF_PATH" -o -z "$PRODUCT_NAME" ]; then
-    echo "error: cfgpath or product is null, please check it."
+    log_error "cfgpath or product is null, please check it."
     fn_usage
     exit 1
   fi
@@ -2287,23 +2334,6 @@ function fn_check_docker_input() {
 
 }
 
-#########################################################
-# 功能: 校验并设置cfg配置路径
-# 规则：
-# 1、目录必须存在
-#########################################################
-function check_docker_cfgpath() {
-  local cfgpath=$1
-
-  if [ ! -d "$cfgpath" ]; then
-    echo "error: cfgpath must be a directory"
-    return 1
-  fi
-
-  SYS_CUSTOM_CONF_PATH=$cfgpath
-
-  return 0
-}
 
 ######################
 # 功能: 准备kiwi环境
@@ -2439,6 +2469,7 @@ function make_qcow2_image() {
     return 0
 }
 
+
 #########################################################
 # 功能：裁剪入口
 # 规则：
@@ -2491,7 +2522,7 @@ fn_do_isocut() {
 # 3、制作docker镜像
 #########################################################
 fn_make_iso_docker() {
-  fn_check_docker_input "$@"
+  fn_check_input "$@"
   if [ $? -ne 0 ]; then
     return 1
   fi
@@ -2515,7 +2546,7 @@ fn_make_iso_docker() {
 # 2、制作qcow2镜像
 #########################################################
 fn_make_iso_qcow2() {
-  fn_check_docker_input "$@"
+  fn_check_input "$@"
   if [ $? -ne 0 ]; then
     return 1
   fi
@@ -2525,6 +2556,232 @@ fn_make_iso_qcow2() {
     return 1
   fi
   return 0
+}
+
+
+
+umount_sys_dir() {
+  set +e
+  if grep -q "${rootfs_dir}/dev " /proc/mounts; then
+    umount -l ${rootfs_dir}/dev
+  fi
+
+  if grep -q "${rootfs_dir}/proc " /proc/mounts; then
+    umount -l ${rootfs_dir}/proc
+  fi
+
+  if grep -q "${rootfs_dir}/sys " /proc/mounts; then
+    umount -l ${rootfs_dir}/sys
+  fi
+
+  set -e
+}
+
+losetup_img() {
+  set +e
+  if [ -d ${root_mnt} ]; then
+    if grep -q "${root_mnt} " /proc/mounts; then
+      umount ${root_mnt}
+    fi
+  fi
+
+  if [ -d ${boot_mnt} ]; then
+    if grep -q "${boot_mnt} " /proc/mounts; then
+      umount ${boot_mnt}
+    fi
+  fi
+
+  if [ "x$device" != "x" ]; then
+    kpartx -d ${device}
+    losetup -d ${device}
+    device=""
+  fi
+
+  if [ -d ${root_mnt} ]; then
+    rm -rf ${root_mnt}
+  fi
+
+  if [ -d ${boot_mnt} ]; then
+    rm -rf ${boot_mnt}
+  fi
+
+  set -e
+}
+
+
+make_rootfs() {
+  log_file_info "make rootfs for ${yum_conf} begin..."
+
+  mkdir -p ${rootfs_dir}/var/lib/rpm
+
+  rpm --root ${rootfs_dir} --initdb
+  mkdir -p ${rootfs_dir}/etc/rpm ${rootfs_dir}/etc/yum.repos.d
+  chmod a+rX ${rootfs_dir}/etc/rpm
+  echo "%_install_langs en_US" >${rootfs_dir}/etc/rpm/macros.image-language-conf
+
+  yum --installroot=${rootfs_dir}/ install openEuler-release -y -c "${yum_conf}"
+  rm -rf ${rootfs_dir}/etc/yum.repos.d/*
+  /bin/cp -f ${yum_conf} ${rootfs_dir}/etc/yum.repos.d/
+
+  set +e
+  yum --installroot=${rootfs_dir}/ install -y $(cat ${CONFIG_RPM_LIST}) -c "${yum_conf}"
+  cat ${rootfs_dir}/etc/systemd/timesyncd.conf | grep "^NTP=*"
+  if [ $? -ne 0 ]; then
+    sed -i -e '/^#NTP=/cNTP=0.cn.pool.ntp.org' ${rootfs_dir}/etc/systemd/timesyncd.conf
+    sed -i 's/#FallbackNTP=/FallbackNTP=1.asia.pool.ntp.org 2.asia.pool.ntp.org /g' ${rootfs_dir}/etc/systemd/timesyncd.conf
+  fi
+  set -e
+
+  cp ${config_dir}/ifcfg-eth0 $rootfs_dir/etc/sysconfig/network-scripts/ifcfg-eth0
+  mkdir -p ${rootfs_dir}/lib/udev/rules.d
+  if [ ! -d ${rootfs_dir}/usr/share/licenses/raspi ]; then
+    mkdir -p ${rootfs_dir}/usr/share/licenses/raspi
+  fi
+  cp ${config_dir}/*.rules ${rootfs_dir}/lib/udev/rules.d/
+  cp ${config_dir}/LICENCE.* ${rootfs_dir}/usr/share/licenses/raspi/
+  cp ${config_dir}/chroot.sh ${rootfs_dir}/chroot.sh
+  chmod +x ${rootfs_dir}/chroot.sh
+  if [ ! -d ${rootfs_dir}/etc/rc.d/init.d ]; then
+    mkdir -p ${rootfs_dir}/etc/rc.d/init.d
+  fi
+  cp ${config_dir}/extend-root.sh ${rootfs_dir}/etc/rc.d/init.d/extend-root.sh
+
+  mount --bind /dev ${rootfs_dir}/dev
+  mount -t proc /proc ${rootfs_dir}/proc
+  mount -t sysfs /sys ${rootfs_dir}/sys
+  chroot ${rootfs_dir} /bin/bash -c "echo 'Y' | /chroot.sh"
+  umount_sys_dir
+  rm ${rootfs_dir}/chroot.sh
+
+  log_file_info "make rootfs for ${yum_conf} end."
+}
+
+mount_raspi_img(){
+  log_file_info "mount raspi img begin..."
+
+  device=""
+  losetup_img
+  size=$(du -sh --block-size=1MiB ${rootfs_dir} | cut -f 1 | xargs)
+  size=$(($size + 1100))
+  losetup -D
+  dd if=/dev/zero of=${IMG_FILE} bs=1MiB count=$size && sync
+  parted ${IMG_FILE} mklabel msdos mkpart primary fat32 8192s 593919s
+  parted ${IMG_FILE} -s set 1 boot
+  parted ${IMG_FILE} mkpart primary linux-swap 593920s 1593343s
+  parted ${IMG_FILE} mkpart primary ext4 1593344s 100%
+  device=$(losetup -f --show -P ${IMG_FILE})
+
+  log_file_info "after losetup: ${device}"
+
+  trap 'losetup_img' EXIT
+
+  log_file_info "image ${IMG_FILE} created and mounted as ${device}"
+
+  kpartx -va ${device}
+  loopX=${device##*\/}
+  partprobe ${device}
+  bootp=/dev/mapper/${loopX}p1
+  swapp=/dev/mapper/${loopX}p2
+  rootp=/dev/mapper/${loopX}p3
+
+  log_file_info "bootp: " ${bootp} "rootp: " ${rootp}
+  mkfs.vfat -n boot ${bootp}
+  mkswap ${swapp} --pagesize 4096
+  mkfs.ext4 ${rootp}
+  mkdir -p ${root_mnt} ${boot_mnt}
+  mount -t vfat -o uid=root,gid=root,umask=0000 ${bootp} ${boot_mnt}
+  mount -t ext4 ${rootp} ${root_mnt}
+  prefix_len=${#loopX}
+  let prefix_len=prefix_len+13
+  fstab_array=("" "" "" "")
+  for line in $(blkid | grep /dev/mapper/${loopX}p); do
+    partuuid=${line#*PARTUUID=\"}
+    fstab_array[${line:$prefix_len:1}]=${partuuid%%\"*}
+  done
+  echo "PARTUUID=${fstab_array[3]}  / ext4	defaults,noatime 0 0" >${rootfs_dir}/etc/fstab
+  echo "PARTUUID=${fstab_array[1]}  /boot vfat	defaults,noatime 0 0" >>${rootfs_dir}/etc/fstab
+  echo "PARTUUID=${fstab_array[2]}  swap swap	defaults,noatime 0 0" >>${rootfs_dir}/etc/fstab
+
+  log_file_info "mount raspi img end."
+}
+
+make_raspi_img() {
+  log_file_info "make raspi img begin..."
+
+  cp -a ${rootfs_dir}/boot/* ${boot_mnt}/
+  cp ${config_dir}/config.txt ${boot_mnt}/
+  echo "console=serial0,115200 console=tty1 root=PARTUUID=${fstab_array[3]} rootfstype=ext4 elevator=deadline rootwait" >${boot_mnt}/cmdline.txt
+
+  rm -rf ${rootfs_dir}/boot
+  rsync -avHAXq ${rootfs_dir}/* ${root_mnt}
+  sync
+  sleep 10
+  losetup_img
+  rm -rf ${rootfs_dir}
+  losetup -D
+  pushd ${img_dir}
+  if [ -f ${IMG_FILE} ]; then
+    sha256sum $(basename ${IMG_FILE}) >${IMG_FILE}.sha256sum
+
+    log_file_info "compress img file..."
+    xz -T 20 -z -c ${IMG_FILE} >${IMG_FILE}.xz
+    sha256sum $(basename ${IMG_FILE}.xz) >${IMG_FILE}.xz.sha256sum
+    log_file_info "made sum files for ${IMG_FILE}"
+  fi
+  popd
+  log_file_info "make raspi img end"
+  log_file_info "raspi img: ${IMG_FILE}"
+}
+
+function fn_make_iso_raspi() {
+  # 仅支持arm架构
+  ARCH="$(uname -m)"
+  if [ "${ARCH}" != "aarch64" ]; then
+    log_error "raspi img not support architecture:${ARCH}"
+    exit 1
+  fi
+
+  # 入参校验
+  fn_check_input "$@"
+
+  # 定义环境变量
+  yum_conf="${CURRENT_PATH}/${SYS_CUSTOM_CONF_PATH}/config/openeuler.repo"
+  workdir="${CURRENT_PATH}/raspi_workdir"
+  tmp_dir="${workdir}/tmp"
+  rootfs_dir="${workdir}/rootfs"
+  root_mnt="${workdir}/root"
+  boot_mnt="${workdir}/boot"
+  dest_dir="${workdir}/raspi_img/"
+  config_dir="${CURRENT_PATH}/${SYS_CUSTOM_CONF_PATH}/config"
+  CONFIG_RPM_LIST="${config_dir}/rpmlist"   # 自定义rpm列表
+  img_dir="${CURRENT_PATH}/result/${BUILD_TIME}" # 归档img目录
+  IMG_FILE=${img_dir}/${PRODUCT_NAME}-${ARCH}.img # img文件路径
+
+  # 导出密码：密码通过passwd新用户的方式从/etc/shadow文件获取
+  export ROOT_PWD=$(cat ${SYS_CUSTOM_CONF_PATH}/config/root_pwd)
+  export PI_PWD=$(cat ${SYS_CUSTOM_CONF_PATH}/config/pi_pwd)
+
+  # 初始化工作目录
+  rm -rf "${tmp_dir}" && mkdir -p "${tmp_dir}" # tmp_dir隶属workdir下层
+  rm -rf "${rootfs_dir}" && mkdir -p "${rootfs_dir}"
+  rm -rf "${img_dir}" && mkdir -p "${img_dir}"
+  mkdir -p ${LOG_DIR} && touch ${LOG_DIR}/sys_custom.log
+
+  # 清理yum信息
+  yum clean all -c "${yum_conf}"
+  yum makecache -c "${yum_conf}"
+
+  trap 'umount_sys_dir' EXIT
+  umount_sys_dir
+
+  IFS=$'\n'
+  make_rootfs
+  mount_raspi_img
+  make_raspi_img
+
+  # 清空工作目录
+  rm -rf ${workdir}
+
 }
 
 #########################################################
@@ -2572,6 +2829,11 @@ function fn_main() {
     fi
   elif [ $PRODUCT_NAME = "qcow2" ];then
     fn_make_iso_qcow2 "$@"
+    if [ $? -ne 0 ]; then
+      return 1
+    fi
+  elif [ $PRODUCT_NAME = "raspi" ];then
+    fn_make_iso_raspi "$@"
     if [ $? -ne 0 ]; then
       return 1
     fi

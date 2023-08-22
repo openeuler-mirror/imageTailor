@@ -1,0 +1,11 @@
+[openeuler]
+name=openeuler
+baseurl=https://repo.openeuler.org/openEuler-22.03-LTS-SP1/everything/aarch64/
+enabled=1
+gpgcheck=0
+
+[openeuler-EPOL]
+name=openeuler-EPOL
+baseurl=https://repo.openeuler.org/openEuler-22.03-LTS-SP1/EPOL/main/aarch64/
+enabled=1
+gpgcheck=0
