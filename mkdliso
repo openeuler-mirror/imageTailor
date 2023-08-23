@@ -2744,6 +2744,18 @@ function fn_make_iso_raspi() {
   # 入参校验
   fn_check_input "$@"
 
+  # root/pi用户密码通过passwd新用户的方式从/etc/shadow文件获取
+  export ROOT_PWD=$(cat ${SYS_CUSTOM_CONF_PATH}/config/root_pwd)
+  export PI_PWD=$(cat ${SYS_CUSTOM_CONF_PATH}/config/pi_pwd)
+  if [ -z "${ROOT_PWD}" ]; then
+      log_error "The password config of root user is empty, please check ${SYS_CUSTOM_CONF_PATH}/config/root_pwd)"
+      exit 1
+  fi
+  if [ -z "${PI_PWD}" ]; then
+      log_error "The password config of pi user is empty, please check ${SYS_CUSTOM_CONF_PATH}/config/pi_pwd)"
+      exit 1
+  fi
+
   # 定义环境变量
   yum_conf="${CURRENT_PATH}/${SYS_CUSTOM_CONF_PATH}/config/openeuler.repo"
   workdir="${CURRENT_PATH}/raspi_workdir"
@@ -2756,10 +2768,6 @@ function fn_make_iso_raspi() {
   CONFIG_RPM_LIST="${config_dir}/rpmlist"   # 自定义rpm列表
   img_dir="${CURRENT_PATH}/result/${BUILD_TIME}" # 归档img目录
   IMG_FILE=${img_dir}/${PRODUCT_NAME}-${ARCH}.img # img文件路径
-
-  # 导出密码：密码通过passwd新用户的方式从/etc/shadow文件获取
-  export ROOT_PWD=$(cat ${SYS_CUSTOM_CONF_PATH}/config/root_pwd)
-  export PI_PWD=$(cat ${SYS_CUSTOM_CONF_PATH}/config/pi_pwd)
 
   # 初始化工作目录
   rm -rf "${tmp_dir}" && mkdir -p "${tmp_dir}" # tmp_dir隶属workdir下层
