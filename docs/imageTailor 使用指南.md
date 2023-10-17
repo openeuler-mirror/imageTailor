@@ -371,7 +371,7 @@ raspberryPi产品：
     4 directories, 3 files
   ```
 
-- 存放在 /opt/imageTailor/custom/cfg_openEuler/usr_file 目录下的目录必须是真实路径（例如路径中不包含软连接。可在系统中使用 `realpath` 或 `readlink -f` 命令查询真实路径）。
+- 存放在 /opt/imageTailor/custom/cfg_openEuler/usr_file 目录下的目录必须是真实路径（例如路径中不包含软链接。可在系统中使用 `realpath` 或 `readlink -f` 命令查询真实路径）。
 
 - 如果需要在系统启动或者安装阶段调用用户提供的脚本，即 hook 脚本，则需要将该文件放在 hook 目录下。
 
