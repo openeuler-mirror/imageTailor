@@ -165,6 +165,12 @@ elif [ $ARCH == "aarch64" ]; then
 
     /usr/sbin/parted ${NAME} -- mkpart primary fat16 0% 5%
     /usr/sbin/parted ${NAME} -- mkpart primary ext4 5% 100%
+
+elif [ $ARCH == "riscv64" ]; then
+
+    /usr/sbin/parted ${NAME} -- mkpart primary ext4 0% 512MB
+    /usr/sbin/parted ${NAME} -- mkpart primary ext4 512MB 100%
+
 fi
 
 export DEVICE=`losetup -f`
@@ -194,6 +200,22 @@ if [ $ARCH == "aarch64" ]; then
 
 fi
 
+if [ $ARCH == "riscv64" ]; then
+
+    export BOOT=`losetup -f`
+    num=$(echo $BOOT | awk -F 'loop' '{print $2}')
+    rm -rf "/dev/loop${num}"
+    mknod $BOOT b 7 $num
+    /usr/sbin/losetup -o ${offset} --sizelimit ${sizelimit} ${BOOT} ${NAME}
+    /usr/sbin/mkfs.ext4 ${BOOT}
+
+    offset=`fdisk -l ${NAME} | grep "${NAME}2" | awk '{print $2}'`
+    sizelimit=`fdisk -l ${NAME} | grep "${NAME}2" | awk '{print $3}'`
+    sizelimit=`echo "($sizelimit - $offset)*512" | bc`
+    offset=`echo "${offset}*512" | bc`
+
+fi
+
 export ROOT=`losetup -f`
 num=$(echo $ROOT | awk -F 'loop' '{print $2}')
 rm -rf "/dev/loop${num}"
@@ -214,6 +236,18 @@ if [ $ARCH == "aarch64" ]; then
     export BOOT_UUID=$(blkid -s UUID -o value ${BOOT})
     mv -f ${WORKSPACE_DIR}/built/boot/* ${MOUNT_WORKSPACE_DIR}/boot/ || true
     [ -d ${WORKSPACE_DIR}/built/boot/ ] && rm -rf ${WORKSPACE_DIR}/built/boot/
+fi
+
+if [ $ARCH == "riscv64" ]; then
+
+    mkdir -p ${WORKSPACE_DIR}/mnt/boot
+    chmod 755 ${WORKSPACE_DIR}/mnt/boot
+    mount -t ext4 -o loop ${BOOT} ${MOUNT_WORKSPACE_DIR}/boot
+    rm -rf "${MOUNT_WORKSPACE_DIR}/boot/lost+found"
+    export BOOT_UUID=$(blkid -s UUID -o value ${BOOT})
+    mv -f ${WORKSPACE_DIR}/built/boot/* ${MOUNT_WORKSPACE_DIR}/boot/ || true
+    [ -d ${WORKSPACE_DIR}/built/boot/ ] && rm -rf ${WORKSPACE_DIR}/built/boot/
+
 fi
 
 sudo mv -t ${WORKSPACE_DIR}/mnt ${WORKSPACE_DIR}/built/* || true

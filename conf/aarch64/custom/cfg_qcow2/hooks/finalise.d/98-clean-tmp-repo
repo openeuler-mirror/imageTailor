@@ -1,0 +1,55 @@
+:<<!
+ * Copyright (c) Huawei Technologies Co., Ltd. 2018-2023. All rights reserved.
+ * oemaker licensed under the Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
+ * PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ * Author:
+ * Create: 2023-05-05
+ * Description: provide qcow2 clean tmp repo
+!
+
+#!/bin/bash
+
+if [ ${DEBUG_TRACE:-0} -gt 0 ]; then
+    set -x
+fi
+set -eu
+set -o pipefail
+set -x
+
+if [ -e /etc/yum.repos.d/tmp.repo ]; then
+    rm -rf /etc/yum.repos.d/tmp.repo
+fi
+
+ls /etc/yum.repos.d/
+
+if [ "X$ISO" == "X" ]; then
+    rm -rf /etc/yum.repos.d/tmp*.repo || true
+fi
+
+if [ -d /var/cache/yum ]; then
+    rm -rf /var/cache/yum
+fi
+
+if [ -d /var/lib/yum/history ]; then
+    rm -rf /var/lib/yum/history
+fi
+
+_repos=`ls /etc/yum.repos.d/ | wc -l`
+
+if [ "$_repos" != "0" ]; then
+    sed -i "s/enabled=0/enabled=1/g" /etc/yum.repos.d/*
+fi
+
+touch /etc/yum.repos.d/openEuler.repo
+echo "[mainline]" >> /etc/yum.repos.d/openEuler.repo
+echo "name=mainline" >> /etc/yum.repos.d/openEuler.repo
+echo "baseurl=https://repo.openeuler.org/openEuler-22.03-LTS-SP2/everything/aarch64/" >> /etc/yum.repos.d/openEuler.repo
+echo "enabled=1" >> /etc/yum.repos.d/openEuler.repo
+echo "gpgcheck=0" >> /etc/yum.repos.d/openEuler.repo
+

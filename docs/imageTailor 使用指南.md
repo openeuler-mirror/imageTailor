@@ -50,7 +50,7 @@
 
 安装和运行 imageTailor 需要满足以下软硬件要求：
 
-- 机器架构为 x86_64 或者 AArch64
+- 机器架构为 x86_64 或者 AArch64 (qcow2已支持riscv64架构)
 
 - 操作系统为 openEuler 22.03 LTS（该版本内核版本为 5.10，python 版本为 3.9，满足工具要求）
 
@@ -437,7 +437,7 @@ raspberryPi产品：
 - 添加库文件
 
   ```shell
-  <strip type="tools">
+  <strip type="libs">
       <file name="ANSI_X3.110"/>
       <file name="ARMSCII-8"/>
       <file name="ASMO_449"/>

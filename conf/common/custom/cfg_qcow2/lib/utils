@@ -115,6 +115,7 @@ function unmount_dir() {
 
 function unmount_mnt() {
     sync
+    unmount_dir "${WORKSPACE_DIR}/mnt/boot"
     unmount_dir "${WORKSPACE_DIR}/mnt"
 }
 
