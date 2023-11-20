@@ -810,7 +810,7 @@ STARTMODE="auto"
   | DEVICE    | 是       | 如：eth1                                          | 网卡名称                                                     |
   | IPADDR    | 是       | 如：192.168.11.100                                | IP 地址<br>当 BOOTPROTO 参数为 static 时，该参数必配；其他情况下，该参数不用配置 |
   | NETMASK   | 是       | -                                                 | 子网掩码<br>当 BOOTPROTO 参数为 static 时，该参数必配；其他情况下，该参数不用配置 |
-  | STARTMODE | 是       | manual / auto / hotplug / ifplugd / nfsroot / off | 启用网卡的方法：<br>manual：用户在终端执行 ifup 命令启用网卡。<br>auto \ hotplug \ ifplug \ nfsroot：当 OS 识别到该网卡时，便启用该网卡。<br>off：任何情况下，网卡都无法被启用。<br>各参数更具体的说明请在制作 ISO 镜像的机器上执行 `man ifcfg` 命令查看。 |
+  | STARTMODE | 是       | manual / auto / hotplug / ifplugd / nfsroot / off | 启用网卡的方法：<br>manual：用户在终端执行 ifup 命令启用网卡。<br>auto \ hotplug \ ifplugd \ nfsroot：当 OS 识别到该网卡时，便启用该网卡。<br>off：任何情况下，网卡都无法被启用。<br>各参数更具体的说明请在制作 ISO 镜像的机器上执行 `man ifcfg` 命令查看。 |
 
 
 #### 配置内核参数
@@ -894,7 +894,7 @@ GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0 crashkernel=512M oops=panic soft
    命令执行完成后，制作出的新文件在 /opt/imageTailor/result/{日期} 目录下，包括 
     openEuler产品：openEuler-aarch64.iso 和 openEuler-aarch64.iso.sha256 
     EMB_rootfs产品：openEuler-image-qemu-*.rootfs.cpio.gz 和 openEuler-image-qemu-*.rootfs.cpio.gz.sha256
-    docker产品：docker.*.tar.xz 和 docker.*.tar.xz.sha256sum 和 docker_source.rpmlist 和 docker_binary.rpmlist
+    docker产品：docker.*.tar.xz 和 docker.*.tar.xz.sha256sum 和 docker_source.rpmlist 和 docker_binary.rpmlist 和 docker_img.size
     qcow2产品: openEuler_{arch}.qcow2 和 openEuler_{arch}.qcow2.sha256sum
     raspi产品：raspi-aarch64.img、rasp-aarch64.img.xz以及对应的sha256sum
 
@@ -1070,6 +1070,7 @@ Pacific/  zone.tab
    move all mkdliso log file to result/log/sys_custom_log_20230309153231.tar.gz
    $ ls result/2023-03-09-15-31/
    docker.aarch64.tar.xz
+   docker_img.size
    docker_binary.rpmlist
    docker_source.rpmlist
    docker.aarch64.tar.xz.sha256sum
