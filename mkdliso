@@ -2462,10 +2462,23 @@ function make_qcow2_image() {
         return 1
     fi
     rm -rf "${PRODUCT_NAME}.img"
+
+    if [ "${ISO_ARCH}" = "riscv64" ]; then
+        cp ${SYS_CUSTOM_CONF_PATH}/config/fw_payload_oe_uboot.bin .
+    fi
+
     sha256sum "openEuler_${ISO_ARCH}.qcow2" > "openEuler_${ISO_ARCH}.qcow2.sha256sum"
-    copy_file_to_result "openEuler_${ISO_ARCH}.qcow2" "openEuler_${ISO_ARCH}.qcow2.sha256sum"
+    if [ "${ISO_ARCH}" = "riscv64" ]; then
+        copy_file_to_result "openEuler_${ISO_ARCH}.qcow2" "openEuler_${ISO_ARCH}.qcow2.sha256sum" "fw_payload_oe_uboot.bin"
+    else
+        copy_file_to_result "openEuler_${ISO_ARCH}.qcow2" "openEuler_${ISO_ARCH}.qcow2.sha256sum"
+    fi
     echo "create ${PRODUCT_NAME} success"
-    rm -rf "openEuler_${ISO_ARCH}.qcow2" "openEuler_${ISO_ARCH}.qcow2.sha256sum"
+    if [ "${ISO_ARCH}" = "riscv64" ]; then
+        rm -rf "openEuler_${ISO_ARCH}.qcow2" "openEuler_${ISO_ARCH}.qcow2.sha256sum" "fw_payload_oe_uboot.bin"
+    else
+        rm -rf "openEuler_${ISO_ARCH}.qcow2" "openEuler_${ISO_ARCH}.qcow2.sha256sum"
+    fi
     return 0
 }
 

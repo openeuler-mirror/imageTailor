@@ -89,6 +89,11 @@ chroot ${TARGET_ROOT} yum  clean all
 echo "%_install_langs C:en_US:en_US.UTF-8" | \
     sudo tee -a $TARGET_ROOT/etc/rpm/macros.langs > /dev/null
 
+if [ $ARCH == "riscv64" ]; then
+    # Set DNS
+    echo "nameserver 8.8.8.8" | sudo tee $TARGET_ROOT/etc/resolv.conf  > /dev/null
+fi
+
 # bootstrap the environment within the chroot; bring in new
 # metadata with an update and install some base packages we need.
 sudo -E chroot $TARGET_ROOT rm -rf etc/yum.repos.d/openEuler.repo
@@ -99,21 +104,26 @@ sudo -E chroot $TARGET_ROOT yum -y reinstall openEuler-release
 sudo -E chroot $TARGET_ROOT yum -y install vi passwd findutils sudo util-linux-ng logrotate
 sudo -E chroot $TARGET_ROOT yum -y install openssh-server setup
 
-if [ $ARCH == "x86_64" ]; then
-    MODULE="xen-netfront xen-blkfront virtio_blk virtio_net virtio_balloon virtio virtio_pci virtio_ring virtio_scsi virtio-rng virtio_console virtio-input nls_utf8 isofs ipt_MASQUERADE nf_nat_masquerade_ipv4 iptable_nat nf_conntrack_ipv4 nf_nat_ipv4 xt_addrtype iptable_filter xt_conntrack nf_nat br_netfilter dm_thin_pool dm_persistent_data dm_bio_prison dm_bufio vport_vxlan openvswitch nf_defrag_ipv6 nf_defrag_ipv4 gre kbox dm_mirror dm_region_hash dm_log dm_mod ablk_helper cryptd ses enclosure sg ib_core shpchp ip_tables sr_mod cdrom marvell usb_storage mpt3sas "
-else
-    MODULE="xen-netfront xen-blkfront virtio_blk virtio_net virtio_balloon virtio virtio_pci virtio_ring virtio_scsi virtio-rng virtio_console virtio-input nls_utf8 isofs ipt_MASQUERADE nf_nat_masquerade_ipv4 iptable_nat nf_conntrack_ipv4 nf_nat_ipv4 xt_addrtype iptable_filter xt_conntrack nf_nat br_netfilter dm_thin_pool dm_persistent_data dm_bio_prison dm_bufio vport_vxlan openvswitch nf_defrag_ipv6 nf_defrag_ipv4 gre kbox dm_mirror dm_region_hash dm_log dm_mod hns_roce crc32_arm64 aes_ce_blk ablk_helper cryptd ses aes_ce_cipher enclosure ghash_ce sha2_ce sha1_ce sg hns_dsaf ib_core ib_addr shpchp ip_tables sr_mod cdrom hns_enet_drv marvell hnae hns_mdio usb_storage mpt3sas "
-fi
+if [ $ARCH != "riscv64" ]; then
 
-FS="ext4 "
-sudo -E chroot $TARGET_ROOT yum -y install dracut
-sudo -E chroot $TARGET_ROOT sed -i "s/#add_drivers+=\"\"/add_drivers+=\"${MODULE}\"/" /etc/dracut.conf
-sudo -E chroot $TARGET_ROOT sed -i "s/#filesystems+=\"\"/filesystems+=\"${FS}\"/" /etc/dracut.conf
+    if [ $ARCH == "x86_64" ]; then
+        MODULE="xen-netfront xen-blkfront virtio_blk virtio_net virtio_balloon virtio virtio_pci virtio_ring virtio_scsi virtio-rng virtio_console virtio-input nls_utf8 isofs ipt_MASQUERADE nf_nat_masquerade_ipv4 iptable_nat nf_conntrack_ipv4 nf_nat_ipv4 xt_addrtype iptable_filter xt_conntrack nf_nat br_netfilter dm_thin_pool dm_persistent_data dm_bio_prison dm_bufio vport_vxlan openvswitch nf_defrag_ipv6 nf_defrag_ipv4 gre kbox dm_mirror dm_region_hash dm_log dm_mod ablk_helper cryptd ses enclosure sg ib_core shpchp ip_tables sr_mod cdrom marvell usb_storage mpt3sas "
+    else
+        MODULE="xen-netfront xen-blkfront virtio_blk virtio_net virtio_balloon virtio virtio_pci virtio_ring virtio_scsi virtio-rng virtio_console virtio-input nls_utf8 isofs ipt_MASQUERADE nf_nat_masquerade_ipv4 iptable_nat nf_conntrack_ipv4 nf_nat_ipv4 xt_addrtype iptable_filter xt_conntrack nf_nat br_netfilter dm_thin_pool dm_persistent_data dm_bio_prison dm_bufio vport_vxlan openvswitch nf_defrag_ipv6 nf_defrag_ipv4 gre kbox dm_mirror dm_region_hash dm_log dm_mod hns_roce crc32_arm64 aes_ce_blk ablk_helper cryptd ses aes_ce_cipher enclosure ghash_ce sha2_ce sha1_ce sg hns_dsaf ib_core ib_addr shpchp ip_tables sr_mod cdrom hns_enet_drv marvell hnae hns_mdio usb_storage mpt3sas "
+    fi
+
+    FS="ext4 "
+    sudo -E chroot $TARGET_ROOT yum -y install dracut
+    sudo -E chroot $TARGET_ROOT sed -i "s/#add_drivers+=\"\"/add_drivers+=\"${MODULE}\"/" /etc/dracut.conf
+    sudo -E chroot $TARGET_ROOT sed -i "s/#filesystems+=\"\"/filesystems+=\"${FS}\"/" /etc/dracut.conf
+fi
 
 if [ $ARCH == "x86_64" ]; then
     sudo -E chroot $TARGET_ROOT yum -y install grub2 kernel
 elif [ $ARCH == "aarch64" ]; then
     sudo -E chroot $TARGET_ROOT yum -y install grub2-efi grub2-efi-modules grub2-tools kernel
+elif [ $ARCH == "riscv64" ]; then
+    sudo -E chroot $TARGET_ROOT yum -y install kernel
 fi
 
 function change_uname()
@@ -169,8 +179,10 @@ if [ $ARCH == "aarch64" ]; then
 fi
 
 # this integrates with the global exit cleanup path.
-[ "X$ISO" != "X" ] && sudo umount $TARGET_ROOT/mnt
-[ "X$REPODIR" != "X" ] && umount ${TARGET_ROOT}${REPODIR:7} && rm -rf  ${TARGET_ROOT}${REPODIR:7}
+if [ $ARCH != "riscv64" ]; then
+    [ "X$ISO" != "X" ] && sudo umount $TARGET_ROOT/mnt
+    [ "X$REPODIR" != "X" ] && umount ${TARGET_ROOT}${REPODIR:7} && rm -rf  ${TARGET_ROOT}${REPODIR:7}
+fi
 
 sudo umount $TARGET_ROOT/proc
 sudo umount $TARGET_ROOT/dev/pts || true

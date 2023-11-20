@@ -1,5 +1,6 @@
 :<<!
  * Copyright (c) Huawei Technologies Co., Ltd. 2018-2023. All rights reserved.
+ * Copyright (c) misaka00251. All rights reserved.
  * oemaker licensed under the Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
@@ -9,39 +10,27 @@
  * PURPOSE.
  * See the Mulan PSL v2 for more details.
  * Author:
- * Create: 2023-05-05
- * Description: provide qcow2 clean tmp repo
+ * Create: 2023-08-16
+ * Description: provide qcow2 config kernel for riscv64
 !
 
 #!/bin/bash
 
-if [ ${DEBUG_TRACE:-0} -gt 0 ]; then
+if [ ${DEBUG_TRACE:-1} -gt 0 ]; then
     set -x
 fi
 set -eu
 set -o pipefail
 set -x
 
-if [ -e /etc/yum.repos.d/tmp.repo ]; then
-    rm -rf /etc/yum.repos.d/tmp.repo
-fi
+function config_kernel () {
+    mkdir -p /boot/extlinux
+    cat <<EOF | tee /boot/extlinux/extlinux.conf
+    default openEuler-riscv
+    label   openEuler-riscv
+            kernel /Image.gz
+            append 'root=/dev/vda2 rw console=ttyS0 systemd.default_timeout_start_sec=600 selinux=0 highres=off earlycon'
+EOF
+}
 
-ls /etc/yum.repos.d/
-
-if [ "X$ISO" == "X" ]; then
-    rm -rf /etc/yum.repos.d/tmp*.repo || true
-fi
-
-if [ -d /var/cache/yum ]; then
-    rm -rf /var/cache/yum
-fi
-
-if [ -d /var/lib/yum/history ]; then
-    rm -rf /var/lib/yum/history
-fi
-
-_repos=`ls /etc/yum.repos.d/ | wc -l`
-
-if [ "$_repos" != "0" ]; then
-    sed -i "s/enabled=0/enabled=1/g" /etc/yum.repos.d/*
-fi
+config_kernel

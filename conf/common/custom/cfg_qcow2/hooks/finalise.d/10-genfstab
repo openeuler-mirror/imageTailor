@@ -25,9 +25,14 @@ set -x
 function gen_fstab () {
     echo "gen fstab"
     echo "root fs uuid : $ROOT_FS_UUID"
-    echo "UUID=$ROOT_FS_UUID    /    ext4    defaults  0 0"  >>  /etc/fstab
     if [ $ARCH == "aarch64" ]; then
+        echo "UUID=${ROOT_FS_UUID}    /    ext4    defaults  0 0"  >>  /etc/fstab
         echo "UUID=${BOOT_UUID} /boot vfat defaults 0 0" >> /etc/fstab
+    elif [ $ARCH == "riscv64" ]; then
+        echo "UUID=${BOOT_UUID}   /       ext4    rw,noatime  0   1"  >>  /etc/fstab
+        echo "UUID=${BOOT_UUID}   /boot   ext4    rw,noatime  0   2" >> /etc/fstab
+    else
+        echo "UUID=${ROOT_FS_UUID}    /    ext4    defaults  0 0"  >>  /etc/fstab
     fi
 }
 
