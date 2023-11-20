@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Copyright (c) Huawei Technologies Co., Ltd. 2015-2019. All rights reserved.
-# Description: EulerOS Security Tool
+# Description: openEuler Security Tool
 # Create: 2015-5-15
 
 #######################################################################################
@@ -25,7 +25,7 @@ SILENT=0
 # execute configure item's id
 EXECID=0
 # temporary target of decompress and compress
-TMPTARGET="EulerOS"
+TMPTARGET="openEuler"
 
 # distinction type(rootfs, ar, cpio.gz)
 DST_TYPE="rootfs"
@@ -233,7 +233,7 @@ function fn_exit() {
 #=============================================================================
 function fn_usage() {
     cat << EOF
-    EulerOS Security Tool
+    openEuler Security Tool
     Usage:     $NAME [Options]
     Options
         -c config_file
@@ -243,7 +243,7 @@ function fn_usage() {
         -d distinction
             AR format target or cpio.gz format rootfs to be hardened
         -l log_file
-            Specify a file to save logs, which is default euleros-security.log
+            Specify a file to save logs, which is default openEuler-security.log
         -x item_id
             Specify the id of security configuration item to be hardened
         -h
@@ -301,7 +301,7 @@ function fn_parse_params() {
 
     # first get LOGFILE resolved
     if [ "$LOGFILE" = "" ]; then
-        LOGFILE=$WORKD'euleros-security.log'
+        LOGFILE=$WORKD'openEuler-security.log'
     fi
     mkdir -p $(dirname $LOGFILE)
     touch $LOGFILE
@@ -429,12 +429,12 @@ function fn_check_rootfs() {
             if [ $i == "boot" ]; then
                 continue
             fi
-            fn_error "[$ROOTFS] is not a standard EulerOS rootfs"
+            fn_error "[$ROOTFS] is not a standard openEuler rootfs"
             fn_exit 2
         fi
     done
     if [ ! -d "$ROOTFS"/boot ]; then
-        fn_info "[$ROOTFS] is a EulerOS iSula rootfs"
+        fn_info "[$ROOTFS] is a openEuler iSula rootfs"
     fi
 }
 
@@ -1089,13 +1089,13 @@ function fn_harden_nouser_nogroup() {
 # Returns      : 0 on success, otherwise on fail
 #=============================================================================
 function fn_harden_grub2() {
-    if [ -d /boot/efi/EFI/euleros -a -d /sys/firmware/efi ]; then
-        grep -E "grub.pbkdf2.sha512.10000" /boot/efi/EFI/euleros/user.cfg > /dev/null 2>&1
+    if [ -d /boot/efi/EFI/openEuler -a -d /sys/firmware/efi ]; then
+        grep -E "grub.pbkdf2.sha512.10000" /boot/efi/EFI/openEuler/user.cfg > /dev/null 2>&1
         if [ $? -eq 0 ]; then
             fn_info "grub2 password check: success"
             return 0
         fi
-        grep -E "grub.pbkdf2.sha512.10000" /boot/efi/EFI/euleros/grub.cfg > /dev/null 2>&1
+        grep -E "grub.pbkdf2.sha512.10000" /boot/efi/EFI/openEuler/grub.cfg > /dev/null 2>&1
         if [ $? -eq 0 ]; then
             fn_info "grub2 password check: success"
             return 0
@@ -1167,7 +1167,7 @@ function fn_main() {
     # pre-process
     fn_pre_hardening
 
-    if [ "x${EULEROS_SECURITY}" = "x0" ]; then
+    if [ "x${OPENEULER_SECURITY}" = "x0" ]; then
         # harden rootfs
         fn_harden_rootfs
 
@@ -1177,14 +1177,14 @@ function fn_main() {
         fi
         fn_harden_sysctl
 
-        # if /etc/euleros_security/security exists, set EULEROS_SECURITY to 1
-        if [ -f /etc/euleros_security/security ]; then
-            sed -i "s/^EULEROS_SECURITY=.*$/EULEROS_SECURITY=1/g" /etc/euleros_security/security
+        # if /etc/openEuler_security/security exists, set OPENEULER_SECURITY to 1
+        if [ -f /etc/openEuler_security/security ]; then
+            sed -i "s/^OPENEULER_SECURITY=.*$/OPENEULER_SECURITY=1/g" /etc/openEuler_security/security
         fi
-    elif [ "x${EULEROS_SECURITY}" = "x1" ]; then
+    elif [ "x${OPENEULER_SECURITY}" = "x1" ]; then
         fn_harden_sysctl
     else
-        echo "the value of EULEROS_SECURITY is unexpected! please check it."
+        echo "the value of OPENEULER_SECURITY is unexpected! please check it."
     fi
 
     local usr_conf_owner=$(ls -ld $USR_SCONF | awk '{print $3}')
@@ -1210,7 +1210,7 @@ function fn_main() {
     fi
 
     # disable the service in system start
-    systemctl disable euleros-security.service
+    systemctl disable openEuler-security.service
 
     # do cleanup and exit
     fn_exit 0
