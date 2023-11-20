@@ -8,12 +8,16 @@ noarch
 
 #### Installation
 
+```bash
 yum install imageTailor
+```
 
 #### Instructions
 
+```bash
 cd /opt/imageTailor
 ./mkdliso -h
+```
 
 #### Contribution
 

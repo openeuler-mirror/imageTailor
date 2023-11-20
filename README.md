@@ -8,12 +8,16 @@
 
 #### 安装教程
 
+```bash
 yum install imageTailor
+```
 
 #### 使用说明
 
+```bash
 cd /opt/imageTailor
 ./mkdliso -h
+```
 
 #### 参与贡献
 
