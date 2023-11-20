@@ -25,8 +25,8 @@ echo "compiletime=${compile_time}"  >> /etc/EulerLinux.conf
 
 set +e
 # Security enforce
-export EULEROS_SECURITY=0
-/usr/sbin/security-tool.sh -d / -c /etc/euleros_security/security.conf -u /etc/euleros_security/usr-security.conf -l /var/log/euleros-security.log -s
+export OPENEULER_SECURITY=0
+/usr/sbin/security-tool.sh -d / -c /etc/openEuler_security/security.conf -u /etc/openEuler_security/usr-security.conf -l /var/log/openEuler-security.log -s
 echo "export TMOUT=300" >> /etc/bashrc
 
 # uninstall security-tool and its related dependency
