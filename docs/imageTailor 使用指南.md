@@ -44,15 +44,15 @@
 
 ## 安装工具
 
-本节以 openEuler 22.03 LTS 版本 AArch64 架构为例，说明安装方法。
+本节以 openEuler 24.03 LTS 版本 AArch64 架构为例，说明安装方法。
 
 ### 软硬件要求
 
 安装和运行 imageTailor 需要满足以下软硬件要求：
 
-- 机器架构为 x86_64 或者 AArch64 (qcow2已支持riscv64架构)
+- 机器架构为 x86_64, AArch64, riscv64
 
-- 操作系统为 openEuler 22.03 LTS（该版本内核版本为 5.10，python 版本为 3.9，满足工具要求）
+- 操作系统为 openEuler 24.03 LTS（该版本内核版本为 6.60，python 版本为 3.11，满足工具要求）
 
 - 运行工具的机器根目录 '/' 需要 40 GB 以上空间
 
@@ -1099,7 +1099,7 @@ Pacific/  zone.tab
    openEuler_aarch64.qcow2.sha256sum
    ```
 
-  raspi:
+  raspi(仅限aarch64):
    ```shell
    $ sudo rm -rf /opt/imageTailor/result
    $ sudo ./mkdliso -p raspi -c custom/cfg_raspi

@@ -1,0 +1,38 @@
+:<<!
+ * Copyright (c) Huawei Technologies Co., Ltd. 2018-2024. All rights reserved.
+ * Copyright (c) misaka00251. All rights reserved.
+ * oemaker licensed under the Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
+ * PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ * Author:
+ * Create: 2024-09-26
+ * Description: provide no uefi img config kernel for riscv64
+!
+
+#!/bin/bash
+
+if [ ${DEBUG_TRACE:-1} -gt 0 ]; then
+    set -x
+fi
+set -eu
+set -o pipefail
+set -x
+
+function config_kernel () {
+    mkdir -p /boot/extlinux
+    kernel_version=$(ls /lib/modules/)
+    cat <<EOF | tee /boot/extlinux/extlinux.conf
+    default openEuler-riscv
+    label   openEuler-riscv
+            kernel /vmlinuz-${kernel_version}
+            append root=PARTUUID=${ROOT_PARTUUID} rw console=ttyS0,115200 earlycon selinux=0
+EOF
+}
+
+config_kernel
+

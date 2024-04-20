@@ -1,0 +1,172 @@
+:<<!
+ * Copyright (c) Huawei Technologies Co., Ltd. 2018-2024. All rights reserved.
+ * oemaker licensed under the Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
+ * PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ * Author:
+ * Create: 2024-09-26
+ * Description: provide img common functions
+!
+
+#!/bin/bash
+
+
+function create_workspace() {
+    WORKSPACE_DIR=$(mktemp -t -d --tmpdir=${TMP_DIR:-/tmp} hmi_build.XXXXXXXX)
+    if [[ $? != 0 ]];then
+      echo "create workspace failed"
+      return 1
+    fi
+
+    export WORKSPACE_DIR
+    export MOUNT_WORKSPACE_DIR=${WORKSPACE_DIR}/mnt
+    export HOOKS_WORKSPACE_DIR=${WORKSPACE_DIR}/hooks
+}
+
+function copy_hooks2workspace() {
+    [[ -d ${HOOKS_WORKSPACE_DIR} ]] || mkdir -p ${HOOKS_WORKSPACE_DIR}
+    cp -a $_PREFIX/hooks/* ${HOOKS_WORKSPACE_DIR}/
+}
+
+function remove_env() {
+    if [[ -f ${MOUNT_WORKSPACE_DIR} ]]; then
+        rm -rf ${MOUNT_WORKSPACE_DIR}
+    fi
+    rm -rf --one-file-system ${WORKSPACE_DIR}
+    losetup -D
+}
+
+function check_break () {
+    if echo "${break:-}" | egrep -e "(,|^)$1(,|$)" -q; then
+        echo "Starting debug shell. Exit to resume building." >&2
+        echo At stage $1 >&2
+        shift
+        "$@"
+        echo "Resuming" >&2
+    fi
+}
+
+function run_hook () {
+    copy_hooks2workspace
+    check_break before-$1 ${break_cmd:-bash}
+    if [[ -d ${HOOKS_WORKSPACE_DIR}/$1.d ]]; then
+        if [[ -n "$2" ]]; then
+            sh ${SCRIPT_HOME}/source_files ${HOOKS_WORKSPACE_DIR}/$1.d | tee $2
+            if [[ ${PIPESTATUS[0]} != 0 ]]; then
+                return 1
+            fi
+        else
+            sh ${SCRIPT_HOME}/source_files ${HOOKS_WORKSPACE_DIR}/$1.d
+        fi
+    fi
+    check_break after-$1 bash
+}
+
+function create_env() {
+    mkdir -p ${MOUNT_WORKSPACE_DIR}
+    TARGET_ROOT=${MOUNT_WORKSPACE_DIR} run_hook root
+    if [[ -z "$(ls ${MOUNT_WORKSPACE_DIR} | grep -v '^lost+found\|tmp$')" ]]; then
+        echo "create target_root failed."
+        return 1
+    fi
+    if [[ -L ${MOUNT_WORKSPACE_DIR}/etc/resolv.conf ]] || [[ -f ${MOUNT_WORKSPACE_DIR}/etc/resolv.conf ]] ; then
+        sudo mv ${MOUNT_WORKSPACE_DIR}/etc/resolv.conf ${MOUNT_WORKSPACE_DIR}/etc/resolv.conf.ORIG
+    fi
+    mkdir -p ${MOUNT_WORKSPACE_DIR}/etc/
+    touch ${MOUNT_WORKSPACE_DIR}/etc/resolv.conf
+    chmod 777 ${MOUNT_WORKSPACE_DIR}/etc/resolv.conf
+    if [[ -e /etc/resolv.conf ]]; then
+        cat /etc/resolv.conf > ${MOUNT_WORKSPACE_DIR}/etc/resolv.conf
+    else
+        echo nameserver 8.8.8.8 > ${MOUNT_WORKSPACE_DIR}/etc/resolv.conf
+    fi
+    mount_dir
+}
+
+function mount_dir() {
+    mkdir -p ${MOUNT_WORKSPACE_DIR}/sys ${MOUNT_WORKSPACE_DIR}/dev/pts ${MOUNT_WORKSPACE_DIR}/proc
+    mount -t proc none ${MOUNT_WORKSPACE_DIR}/sys
+    mount --bind /dev ${MOUNT_WORKSPACE_DIR}/dev
+    mount --bind /dev/pts ${MOUNT_WORKSPACE_DIR}/dev/pts
+    mount -t sysfs none ${MOUNT_WORKSPACE_DIR}/proc
+}
+
+function unmount_dir() {
+    local mount_dir="$1"
+
+    if [[ ! -d ${mount_dir} ]]; then
+        echo "dir ${mount_dir} is not exist"
+        return 1
+    fi
+
+    local link_dir=$(readlink -e ${mount_dir})
+    local local_mnts=$(awk '{print $2}' < /proc/mounts | grep "^${link_dir}" | sort -r)
+    for local_mnt in ${local_mnts}
+    do
+       umount -fl ${local_mnt} || true
+       echo "unmount ${local_mnt}"
+    done
+}
+
+function unmount_mnt() {
+    sync
+    unmount_dir "${WORKSPACE_DIR}/mnt/boot"
+    unmount_dir "${WORKSPACE_DIR}/mnt"
+}
+
+function fstrim_mnt() {
+    sync
+    fstrim "${WORKSPACE_DIR}/mnt"
+}
+
+
+function run_in_root() {
+    ORIG_HOME=$HOME
+    cmd="$@"
+    export HOME=/root
+    sudo -E chroot ${MOUNT_WORKSPACE_DIR} env -u TMPDIR PATH="\$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" sh -c "$cmd"
+    export HOME=${ORIG_HOME}
+}
+
+function run_hook_in_root() {
+    copy_hooks2workspace
+    hook_name=$1
+
+    if [[ -d ${HOOKS_WORKSPACE_DIR}/${hook_name}.d ]];then
+        sudo mkdir -p ${MOUNT_WORKSPACE_DIR}/tmp/hooks/
+        sudo mount --bind ${HOOKS_WORKSPACE_DIR} ${MOUNT_WORKSPACE_DIR}/tmp/hooks
+        sudo mount -o remount,ro,bind ${HOOKS_WORKSPACE_DIR} ${MOUNT_WORKSPACE_DIR}/tmp/hooks
+        check_break before-${hook_name} run_in_root bash
+        trap "check_break after-error $in_target_arg ${break_cmd:-bash}" ERR
+        cp ${SCRIPT_HOME}/source_files ${MOUNT_WORKSPACE_DIR}
+        run_in_root sh source_files /tmp/hooks/${hook_name}.d
+        trap - ERR
+        check_break after-${hook_name} run_in_root bash
+        sudo umount -f ${MOUNT_WORKSPACE_DIR}/tmp/hooks
+        sudo rm -rf ${MOUNT_WORKSPACE_DIR}/tmp/hooks
+    fi
+}
+
+function remove_workspace() {
+    TARGET_ROOT=${MOUNT_WORKSPACE_DIR} run_hook cleanup
+    if [[ -e ${MOUNT_WORKSPACE_DIR}/etc/resolv.conf ]] && lsattr ${MOUNT_WORKSPACE_DIR}/etc/resolv.conf | grep '^....i' >/dev/null ; then
+        rm -rf ${MOUNT_WORKSPACE_DIR}/etc/resolv.conf.ORIG
+    else
+        rm -f ${MOUNT_WORKSPACE_DIR}/etc/resolv.conf
+        if [[ -L ${MOUNT_WORKSPACE_DIR}/etc/resolv.conf.ORIG ]] || [[ -f ${MOUNT_WORKSPACE_DIR}/etc/resolv.conf.ORIG ]] ; then
+            mv ${MOUNT_WORKSPACE_DIR}/etc/resolv.conf.ORIG ${MOUNT_WORKSPACE_DIR}/etc/resolv.conf
+        fi
+    fi
+    if [[ -d ${MOUNT_WORKSPACE_DIR}/tmp ]];then
+        unmount_dir ${MOUNT_WORKSPACE_DIR}/tmp
+    fi
+    if [[ -d ${MOUNT_WORKSPACE_DIR}/tmp ]];then
+        find ${MOUNT_WORKSPACE_DIR}/tmp -maxdepth 1 -mindepth 1 | xargs sudo rm -rf --one-file-system
+    fi
+}
+
