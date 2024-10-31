@@ -201,6 +201,7 @@ function make_os_release_for_tar() {
 # 制作ISO启动文件
 # X86：制作OS.tar.gz，生成isolinux.cfg文件
 # ARM：制作linux.gz
+# RISCV: 制作linux.gz
 #########################################################
 function make_iso_boot_file() {
   local initrd_file=$(ls ${MYISO_RESULT} | grep initrd$)
@@ -224,8 +225,8 @@ function make_iso_boot_file() {
   fi
   chmod 0755 $CD/repo/*
 
-  if [ "${ISO_ARCH}" = "aarch64" ]; then
-    echo "Creating linux.gz for aarch64 ..."
+  if [ "${ISO_ARCH}" = "aarch64" ] || [ "${ISO_ARCH}" = "riscv64" ]; then
+    echo "Creating linux.gz for ${ISO_ARCH} ..."
     cp -a $KIWI_EL_RELEASE/* $CD/
 
     pushd $CD/
@@ -349,7 +350,7 @@ function make_os_release_for_dproj() {
 function make_iso_server() {
   echo "Creating ISO image ..."
   local attr="-R -J -T -r -l -d -input-charset \"utf-8\" -allow-multidot "
-  if [ "${ISO_ARCH}" = "aarch64" ]; then
+  if [ "${ISO_ARCH}" = "aarch64" ] || [ "${ISO_ARCH}" = "riscv64" ]; then
     attr="${attr} -e efibootimg -no-emul-boot -c boot.catalog -hide boot.catalog -hide efibootimg"
   else
     attr="${attr} -allow-leading-dots -no-bak -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table "
@@ -378,10 +379,17 @@ function make_iso_server() {
 # 功能：显示帮助信息
 #########################################################
 function fn_usage() {
-  raspi_info=""
+  extend_info=""
   if [ "${ISO_ARCH}" == "aarch64" ]; then
-     raspi_info="./mkdliso -p raspi -c custom/cfg_raspi" # only support aarch64
+     extend_info="./mkdliso -p raspi -c custom/cfg_raspi" # only support aarch64
   fi
+
+  if [ "${ISO_ARCH}" == "riscv64" ]; then # only support riscv64
+     extend_info="./mkdliso -p qcow2_efi -c custom/cfg_qcow2
+    ./mkdliso -p rv64img -c custom/cfg_img
+    ./mkdliso -p rv64img_efi -c custom/cfg_img"
+  fi
+
 
   cat <<EOF
 -------------------------------------------------------------------------------------------------------------
@@ -399,7 +407,7 @@ Example:
     ./mkdliso -p docker -c custom/cfg_docker
     ./mkdliso -p EMB_rootfs -c custom/cfg_EMB_rootfs
     ./mkdliso -p qcow2 -c custom/cfg_qcow2
-    ${raspi_info}
+    ${extend_info}
 
     help:
     ./mkdliso -h
@@ -658,7 +666,6 @@ function check_cfgpath() {
 
   SYS_CUSTOM_CONF_PATH=$cfgpath
   MINIOS_BOOT=$SYS_CUSTOM_CONF_PATH/usr_install/boot
-
   return 0
 }
 
@@ -1318,7 +1325,7 @@ function fn_copy_elrelease() {
   local l_minios_boot="${KIWI_EL_RELEASE}/boot/"
   local l_copyfile=
   local l_partition_conf="$USRCUSTOM_TMPCFG_PATH/partition"
-
+  
   ## for KIWIImage.pm
   if [ -d "$KIWI_EL_RELEASE" ]; then
     rm -rf $KIWI_EL_RELEASE/*
@@ -1329,7 +1336,7 @@ function fn_copy_elrelease() {
   if [ "GRUB2" = "$RELEASE_BOOTLOADER_TYPE" ]; then
     if [ "${ISO_ARCH}" = "x86_64" ]; then
       echo "get grub2 efi for x86_64 ..."
-      fn_get_grub2_efi
+      fn_x86_64_get_grub2_efi
       if [ $? -ne 0 ]; then
         return 1
       fi
@@ -1562,6 +1569,14 @@ function fn_kiwi_init() {
 
   if [ "${ISO_ARCH}" = "aarch64" ]; then
     fn_create_efiboot_image
+    if [ $? -ne 0 ]; then
+      return 1
+    fi
+  fi
+
+  if [ "${ISO_ARCH}" = "riscv64" ]; then
+    echo "get grub2 efi for riscv64 ..."
+    fn_riscv64_get_grub2_efi
     if [ $? -ne 0 ]; then
       return 1
     fi
@@ -2064,10 +2079,81 @@ function fn_createrepo {
 }
 
 #########################################################
+# get grubriscv64.efi from grub2-efi.rpm
+#########################################################
+function fn_riscv64_get_grub2_efi() {
+  local efibootimage_name="efibootimg"
+  local efibootimage_dir="efiboot_tmp"
+  local mkfs_fat=$(which mkfs.vfat)
+
+  pushd $KIWI_EL_RELEASE >/dev/null
+  [ -f $efibootimage_name ] && rm -rf $efibootimage_name
+  [ -d $efibootimage_dir ] && rm -rf $efibootimage_dir
+  dd if=/dev/zero of=$efibootimage_name bs=1M count=10
+  if [ $? -ne 0 ]; then
+    echo "error: create efibootimage for ${ISO_ARCH} failed"
+    popd >/dev/null
+    return 1
+  fi
+
+  $mkfs_fat $efibootimage_name
+  if [ $? -ne 0 ]; then
+    echo "error: mkfs_fat for efibootimage failed"
+    popd >/dev/null
+    return 1
+  fi
+
+  mkdir -p $efibootimage_dir
+  mount -o loop $efibootimage_name $efibootimage_dir
+  if [ $? -ne 0 ]; then
+    echo "error: mount for $efibootimage_name failed"
+    popd >/dev/null
+    return 1
+  fi
+
+  BOOT_dir=EFI/BOOT
+
+  # create directory, tmp directory
+  mkdir -p ${BOOT_dir}
+  mkdir -p $efibootimage_dir/${BOOT_dir}
+
+  mkdir -p $efibootimage_dir/EFI/GRUB2
+  # grub.cfg
+  if [ -d ${BOOT_dir} ]; then
+    cp $CURRENT_PATH/$KIWI_EULERLINUX_GRUB2/EFI/GRUB2/grub.cfg $efibootimage_dir/${BOOT_dir}
+    cp $CURRENT_PATH/$KIWI_EULERLINUX_GRUB2/EFI/GRUB2/grub.cfg ${BOOT_dir}
+  fi
+
+  # grubriscv64.efi
+  mkdir grub2_rpm_tmp
+  pushd grub2_rpm_tmp
+  find $CURRENT_PATH -name grub2-efi-riscv64-[0-9]*.riscv64.rpm | grep -v storage | head -1 | xargs rpm2cpio | cpio -id
+  popd
+
+  GRUBRISCV64_FILE=$(find ./grub2_rpm_tmp -name grubriscv64.efi | head -1)
+  cp -a $GRUBRISCV64_FILE $efibootimage_dir/EFI/GRUB2
+  if [ -d ${BOOT_dir} ]; then
+    cp -a $GRUBRISCV64_FILE $efibootimage_dir/${BOOT_dir}
+    cp -a $GRUBRISCV64_FILE ${BOOT_dir}
+  fi
+
+  umount $efibootimage_dir
+  rm -rf $efibootimage_dir
+  mkdir -p EFI/GRUB2
+  cp $CURRENT_PATH/$KIWI_EULERLINUX_GRUB2/EFI/GRUB2/grub.cfg EFI/GRUB2/
+  if [ -d $CURRENT_PATH/$KIWI_EULERLINUX_GRUB2/for-pxe ]; then
+    cp -a $CURRENT_PATH/$KIWI_EULERLINUX_GRUB2/for-pxe .
+    cp -a $GRUBRISCV64_FILE for-pxe
+  fi
+  rm -rf grub2_rpm_tmp
+  popd >/dev/null
+
+}
+
+#########################################################
 # get grubx86.efi from grub2-efi.rpm
 #########################################################
-
-function fn_get_grub2_efi() {
+function fn_x86_64_get_grub2_efi() {
   local ret=
   local tmpdir=
   local efibootimage_name="efi"
@@ -2409,6 +2495,7 @@ function make_docker_image() {
     if [ -d /var/cache/kiwi/yum ];then
         rm -rf /var/cache/kiwi/yum
     fi
+    echo "kiwicompat --build ${cfg_dir} -d ${img_dir}"
     kiwicompat --build "${cfg_dir}" -d "${img_dir}"
     if [ $? -ne 0 ];then
         log_error "Failed on kiwi build docker image" &> /dev/null
@@ -2465,23 +2552,66 @@ function make_qcow2_image() {
 
     if [ "${ISO_ARCH}" = "riscv64" ]; then
         cp ${SYS_CUSTOM_CONF_PATH}/config/fw_payload_oe_uboot.bin .
+        cp ${SYS_CUSTOM_CONF_PATH}/config/RISCV_VIRT_CODE.fd .
+        cp ${SYS_CUSTOM_CONF_PATH}/config/RISCV_VIRT_VARS.fd .
     fi
 
     sha256sum "openEuler_${ISO_ARCH}.qcow2" > "openEuler_${ISO_ARCH}.qcow2.sha256sum"
     if [ "${ISO_ARCH}" = "riscv64" ]; then
         copy_file_to_result "openEuler_${ISO_ARCH}.qcow2" "openEuler_${ISO_ARCH}.qcow2.sha256sum" "fw_payload_oe_uboot.bin"
+        if [ "$PRODUCT_NAME" = "qcow2_efi" ]; then
+	    copy_file_to_result "RISCV_VIRT_CODE.fd" "RISCV_VIRT_VARS.fd"
+        fi
     else
         copy_file_to_result "openEuler_${ISO_ARCH}.qcow2" "openEuler_${ISO_ARCH}.qcow2.sha256sum"
     fi
+
     echo "create ${PRODUCT_NAME} success"
+
     if [ "${ISO_ARCH}" = "riscv64" ]; then
         rm -rf "openEuler_${ISO_ARCH}.qcow2" "openEuler_${ISO_ARCH}.qcow2.sha256sum" "fw_payload_oe_uboot.bin"
+        if [ "$PRODUCT_NAME" = "qcow2_efi" ]; then
+	    rm -rf "RISCV_VIRT_CODE.fd" "RISCV_VIRT_VARS.fd"
+	fi
     else
         rm -rf "openEuler_${ISO_ARCH}.qcow2" "openEuler_${ISO_ARCH}.qcow2.sha256sum"
     fi
     return 0
 }
 
+######################
+# 功能: 制作img镜像
+# 规则：
+# 1、准备环境
+# 2、制作镜像
+# 3、生成附带信息文件
+######################
+function make_img_image() {
+    repo_params=""
+    repo_config=$(cat ${SYS_CUSTOM_CONF_PATH}/config/repo)
+    pwd_config=$(cat ${SYS_CUSTOM_CONF_PATH}/config/root_pwd)
+    for repo_url in ${repo_config}
+    do
+        repo_params="${repo_params} -r ${repo_url}"
+    done
+    sh ${SYS_CUSTOM_CONF_PATH}/bin/create-image ${repo_params} -n ${PRODUCT_NAME} -p ${pwd_config}
+    if [ $? -ne 0 ];then
+        log_error "Failed on build img image" &> /dev/null
+        return 1
+    fi
+    
+    if [ "${ISO_ARCH}" = "riscv64" ]; then
+        copy_file_to_result "${PRODUCT_NAME}.img"
+    fi
+
+    echo "create ${PRODUCT_NAME} success"
+
+    if [ "${ISO_ARCH}" = "riscv64" ]; then
+        rm -rf "${PRODUCT_NAME}.img"
+    fi
+
+    return 0
+}
 
 #########################################################
 # 功能：裁剪入口
@@ -2572,6 +2702,30 @@ fn_make_iso_qcow2() {
 }
 
 
+#########################################################
+# 功能：制作镜像入口
+# 规则：
+# 1、校验入参格式
+# 2、制作img镜像
+#########################################################
+fn_make_iso_img() {
+  ARCH="$(uname -m)"
+  if [ "${ARCH}" != "riscv64" ]; then
+    log_error "riscv64 img not support architecture:${ARCH}"
+    exit 1
+  fi
+
+  fn_check_input "$@"
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+
+  make_img_image
+  if [ $? -ne 0 ]; then
+    return 1
+  fi
+  return 0
+}
 
 umount_sys_dir() {
   set +e
@@ -2843,17 +2997,22 @@ function fn_main() {
     return 1
   fi
 
-  if [ $PRODUCT_NAME = "docker" ];then
+  if [ $PRODUCT_NAME = "docker" ]; then
     fn_make_iso_docker "$@"
     if [ $? -ne 0 ]; then
       return 1
     fi
-  elif [ $PRODUCT_NAME = "qcow2" ];then
+  elif [ "$PRODUCT_NAME" = "qcow2" ] || [ "$PRODUCT_NAME" = "qcow2_efi" ]; then
     fn_make_iso_qcow2 "$@"
     if [ $? -ne 0 ]; then
       return 1
     fi
-  elif [ $PRODUCT_NAME = "raspi" ];then
+  elif [ "$PRODUCT_NAME" = "rv64img" ] || [ "$PRODUCT_NAME" = "rv64img_efi" ]; then
+    fn_make_iso_img "$@"
+    if [ $? -ne 0 ]; then
+      return 1
+    fi
+  elif [ $PRODUCT_NAME = "raspi" ]; then
     fn_make_iso_raspi "$@"
     if [ $? -ne 0 ]; then
       return 1
@@ -2872,3 +3031,4 @@ fn_main "$@"
 ret=$?
 umask $UMASK_BAK
 exit $ret
+

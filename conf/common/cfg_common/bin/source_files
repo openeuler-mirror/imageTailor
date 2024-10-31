@@ -1,0 +1,113 @@
+:<<!
+ * Copyright (c) Huawei Technologies Co., Ltd. 2018-2024. All rights reserved.
+ * oemaker licensed under the Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
+ * PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ * Author:
+ * Create: 2023-05-05
+ * Description: provide img and qcow2 source
+!
+
+#!/bin/bash
+
+regex=${RUN_PARTS_REGEX:-"^[0-9A-Za-z_-]+$"}
+show_list_sign=""
+
+set -ue
+set -o pipefail
+
+name=$(basename $0)
+
+function usage() {
+    cat << EOF
+Usage: $name [OPTION] scripts directory
+
+Option:
+      --list  print names of all valid files
+Examples:
+      source_file --list hooks/root.d/
+      source_file hooks/root.d/
+EOF
+}
+
+function source_env() {
+    local dir=${target_dir}/../environment.d
+
+    if [[ -d ${dir} ]] ; then
+        local env_files=$(find ${dir} -maxdepth 1 -xtype f | grep -E "/[0-9A-Za-z_\.-]+$" | LANG=C sort -n)
+        for env_file in ${env_files} ; do
+            source ${env_file}
+        done
+    fi
+}
+
+function print_format() {
+    local FORMAT="$1"
+    shift
+    printf "${FORMAT}" "$@" >&2
+}
+
+function main() {
+    if [ $# -lt 1 ] ; then
+        usage
+    fi
+
+    if [ "$1" == "--list" ] ; then
+        show_list_sign="1"
+        shift
+    fi
+
+    target_dir="${1:-}"
+
+    if ! [[ -d ${target_dir} ]] ; then
+        echo "${target_dir} is not a directory"
+        usage
+        exit 1
+    fi
+
+
+    targets=$(find ${target_dir} -maxdepth 1 -xtype f -executable -printf '%f\n' | grep -E "${regex}" | LANG=C sort -n || echo "")
+
+    if [ "${show_list_sign}" == "1" ] ; then
+        for target in $targets ; do
+            echo "${target_dir}/${target}"
+        done
+        exit 0
+    fi
+
+    PROFILE_DIR=$(mktemp -d --tmpdir profiledir.XXXXXX)
+
+
+    source_env
+
+    for target in ${targets} ; do
+        echo "start ${target_dir}/${target}"
+        target_tag=${target//\//_}
+        date +%s.%N > ${PROFILE_DIR}/profile_start_${target_tag}
+        ${target_dir}/$target
+        target_tag=${target//\//_}
+        date +%s.%N > ${PROFILE_DIR}/profile_stop_${target_tag}
+        echo "${target} completed"
+    done
+
+    echo "profiling"
+    echo "target: $(basename ${target_dir})"
+    pushd ${PROFILE_DIR}
+        for start_file_name in $(find . -name 'profile_start_*' -printf '%f\n' | env LC_ALL=C sort -n) ; do
+            stop_file_name=profile_stop_${start_file_name##profile_start_}
+            start_seconds=$(cat ${start_file_name})
+            stop_seconds=$(cat ${stop_file_name})
+            duration=$(echo - | awk "{ print ${stop_seconds} - ${start_seconds} }")
+            LC_NUMERIC=C LC_ALL=C print_format "%-40s %10.3f\n" ${start_file_name##profile_start_} $duration
+        done
+    popd
+    rm -rf ${PROFILE_DIR}
+    echo "end profiling"
+}
+
+main "$@"

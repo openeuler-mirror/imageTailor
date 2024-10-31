@@ -1,0 +1,125 @@
+:<<!
+ * Copyright (c) Huawei Technologies Co., Ltd. 2018-2024. All rights reserved.
+ * oemaker licensed under the Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
+ * PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ * Author:
+ * Create: 2024-09-26
+ * Description: provide uefi img install_grub2
+!
+
+#!/bin/bash
+
+if [ ${DEBUG_TRACE:-1} -gt 0 ]; then
+    set -x
+fi
+set -eu
+set -o pipefail
+set -x
+GRUB_CFG=
+
+function install_grub2 ()
+{
+    GRUBNAME=$(which grub2-install)
+    echo "Installing GRUB2..."
+    GRUB_OPTS=${GRUB_OPTS:-"--force"}
+    GRUB_OPTS="$GRUB_OPTS --target=i386-pc"
+
+    $GRUBNAME --modules="biosdisk part_msdos" $GRUB_OPTS $DEVICE
+
+    GRUB_CFG=/boot/grub2/grub.cfg
+
+    echo 'GRUB_TIMEOUT=5' >> /etc/default/grub
+    echo 'GRUB_DEFAULT=saved' >> /etc/default/grub
+    echo 'GRUB_DISABLE_SUBMENU=true' >> /etc/default/grub
+    echo 'GRUB_TERMINAL_OUTPUT="console"' >> /etc/default/grub
+    echo 'GRUB_CMDLINE_LINUX="rootfstype=ext4 nomodeset quiet oops=panic softlockup_panic=1 nmi_watchdog=1 rd.shell=0 selinux=0 crashkernel=256M panic=3"' >> /etc/default/grub
+    echo 'GRUB_DISABLE_RECOVERY="true"' >>/etc/default/grub
+
+    echo "cat <<EOF" >> /etc/grub.d/00_header
+    echo "set superusers=\"root\"" >> /etc/grub.d/00_header
+    echo "password_pbkdf2 root grub.pbkdf2.sha512.10000.5A45748D892672FDA02DD3B6F7AE390AC6E6D532A600D4AC477D25C7D087644697D8A0894DFED9D86DC2A27F4E01D925C46417A225FC099C12DBD3D7D49A7425.2BD2F5BF4907DCC389CC5D165DB85CC3E2C94C8F9A30B01DACAA9CD552B731BA1DD3B7CC2C765704D55B8CD962D2AEF19A753CBE9B8464E2B1EB39A3BB4EAB08" >> /etc/grub.d/00_header
+
+    echo "EOF" >> /etc/grub.d/00_header
+
+    grub2-mkconfig -o $GRUB_CFG
+    sed_str="root=UUID=${ROOT_FS_UUID}"
+    sed -i "s#root=/opt/imageTailor/.*.img#${sed_str}#g" $GRUB_CFG
+}
+
+function install_aarch64_grub2_efi ()
+{
+    cp -r /usr/lib/grub/arm64-efi /boot/efi/EFI/openEuler/
+    eval "grub2-mkimage -d /usr/lib/grub/arm64-efi -O arm64-efi --output=/boot/efi/EFI/openEuler/grubaa64.efi '--prefix=(,msdos1)/efi/EFI/openEuler' fat part_gpt part_msdos linux"
+
+    mkdir -p /boot/EFI/BOOT/
+    cp -f /boot/efi/EFI/openEuler/grubaa64.efi /boot/EFI/BOOT/BOOTAA64.EFI
+
+    echo 'GRUB_TIMEOUT=5' >> /etc/default/grub
+    echo 'GRUB_DEFAULT=saved' >> /etc/default/grub
+    echo 'GRUB_DISABLE_SUBMENU=true' >> /etc/default/grub
+    echo 'GRUB_TERMINAL_OUTPUT="console"' >> /etc/default/grub
+    echo 'GRUB_CMDLINE_LINUX="rootfstype=ext4 nomodeset quiet oops=panic softlockup_panic=1 net.ifnames=0 biosdevname=0 nmi_watchdog=1 rd.shell=0 selinux=0 crashkernel=256M reserve_kbox_mem=16M crash_kexec_post_notifiers panic=3 no-steal-time use-sched-idle-time"' >> /etc/default/grub
+    echo 'GRUB_DISABLE_RECOVERY="true"' >>/etc/default/grub
+
+    echo "cat <<EOF" >> /etc/grub.d/00_header
+    echo "set superusers=\"root\"" >> /etc/grub.d/00_header
+    echo "password_pbkdf2 root grub.pbkdf2.sha512.10000.D0649C25C42DA547B79AD683974DE105D0F0899C1EFA4AD34BE49E87C5A41C89F9C1E29A88BBDC05584706C89F3FEB5A284A8A85738058A15F21A862A0464E34.CC0D536DF0418B75C34351B635BF209E05B02503B2440C7FE290843287925E0221860080318EC5A8C8D796B29A2C73C6623B6EAAE04FF8840EE6FCEDA3C29C46" >> /etc/grub.d/00_header
+
+    echo "EOF" >> /etc/grub.d/00_header
+    GRUB_CFG=/boot/efi/EFI/openEuler/grub.cfg
+    grub2-mkconfig -o $GRUB_CFG
+    sed_str="root=UUID=${ROOT_FS_UUID}"
+    sed -i "s#root=/opt/imageTailor/.*.img#${sed_str}#g" $GRUB_CFG
+}
+
+function install_riscv64_grub2_efi ()
+{
+    cp -r /usr/lib/grub/riscv64-efi /boot/efi/EFI/openEuler/
+    eval "grub2-mkimage -d /usr/lib/grub/riscv64-efi -O riscv64-efi --output=/boot/efi/EFI/openEuler/grubriscv64.efi '--prefix=(,msdos1)/efi/EFI/openEuler' fat part_gpt part_msdos linux"
+
+    mkdir -p /boot/EFI/BOOT/
+    cp -f /boot/efi/EFI/openEuler/grubriscv64.efi /boot/EFI/BOOT/BOOTRISCV64.EFI
+
+    echo 'GRUB_TIMEOUT=5' >> /etc/default/grub
+    echo 'GRUB_DEFAULT=saved' >> /etc/default/grub
+    echo 'GRUB_DISABLE_SUBMENU=true' >> /etc/default/grub
+    echo 'GRUB_TERMINAL_OUTPUT="console"' >> /etc/default/grub
+    echo 'GRUB_CMDLINE_LINUX="selinux=0 console=ttyS0,115200 earlycon"' >> /etc/default/grub
+    echo 'GRUB_DISABLE_RECOVERY="true"' >>/etc/default/grub
+
+    echo "cat <<EOF" >> /etc/grub.d/00_header
+    echo "set superusers=\"root\"" >> /etc/grub.d/00_header
+    echo "password_pbkdf2 root grub.pbkdf2.sha512.10000.D0649C25C42DA547B79AD683974DE105D0F0899C1EFA4AD34BE49E87C5A41C89F9C1E29A88BBDC05584706C89F3FEB5A284A8A85738058A15F21A862A0464E34.CC0D536DF0418B75C34351B635BF209E05B02503B2440C7FE290843287925E0221860080318EC5A8C8D796B29A2C73C6623B6EAAE04FF8840EE6FCEDA3C29C46" >> /etc/grub.d/00_header
+
+    echo "EOF" >> /etc/grub.d/00_header
+    GRUB_CFG=/boot/efi/EFI/openEuler/grub.cfg
+    grub2-mkconfig -o $GRUB_CFG
+    sed_str="root=UUID=${ROOT_FS_UUID}"
+    sed -i "s#root=/opt/imageTailor/.*.img#${sed_str}#g" $GRUB_CFG
+}
+
+if [ -f /boot/grub2/device.map ]; then
+cat << EOF | tee /boot/grub2/device.map > /dev/null
+(hd0)   /dev/xvda
+EOF
+fi
+
+if [ $ARCH == "x86_64" ]; then
+    install_grub2
+fi
+
+
+if [ $ARCH == "aarch64" ]; then
+    install_aarch64_grub2_efi
+fi
+
+if [ $ARCH == "riscv64" ]; then
+    install_riscv64_grub2_efi
+fi
+

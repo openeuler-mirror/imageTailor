@@ -1,0 +1,39 @@
+:<<!
+ * Copyright (c) Huawei Technologies Co., Ltd. 2018-2024. All rights reserved.
+ * oemaker licensed under the Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *     http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
+ * PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ * Author:
+ * Create: 2024-09-26
+ * Description: provide no uefi qcow2 gen_fstab
+!
+
+#!/bin/bash
+
+if [ ${DEBUG_TRACE:-1} -gt 0 ]; then
+    set -x
+fi
+set -eu
+set -o pipefail
+set -x
+
+function gen_fstab () {
+    echo "gen fstab"
+    echo "root fs uuid : $ROOT_FS_UUID"
+    if [ $ARCH == "aarch64" ]; then
+        echo "UUID=${ROOT_FS_UUID}    /    ext4    defaults  0 0"  >>  /etc/fstab
+        echo "UUID=${BOOT_UUID} /boot vfat defaults 0 0" >> /etc/fstab
+    elif [ $ARCH == "riscv64" ]; then
+        echo "UUID=${ROOT_FS_UUID}   /       ext4    rw,noatime  0   1"  >>  /etc/fstab
+        echo "UUID=${BOOT_UUID}   /boot   ext4    rw,noatime  0   2" >> /etc/fstab
+    else
+        echo "UUID=${ROOT_FS_UUID}    /    ext4    defaults  0 0"  >>  /etc/fstab
+    fi
+}
+
+gen_fstab
