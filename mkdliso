@@ -207,6 +207,11 @@ function make_iso_boot_file() {
   local initrd_file=$(ls ${MYISO_RESULT} | grep initrd$)
   local linux_file=$(ls ${MYISO_RESULT} | grep kernel$)
 
+  if [ -z "$linux_file" ] || [ -z "$initrd_file" ]; then
+    echo "ERROR: Kernel or initramfs file not found in ${MYISO_RESULT}"
+    exit 1
+  fi
+
   echo "Creating OS.tar.gz ..."
   rm -rf $CD
   mkdir -p $CD/repo
@@ -2454,6 +2459,7 @@ function copy_file_to_result() {
     do
       cp -a "${file_name}" "${release_dir}"
     done
+    echo "result will be saved to: ${release_dir}"
 }
 
 ######################
@@ -2560,7 +2566,7 @@ function make_qcow2_image() {
     if [ "${ISO_ARCH}" = "riscv64" ]; then
         copy_file_to_result "openEuler_${ISO_ARCH}.qcow2" "openEuler_${ISO_ARCH}.qcow2.sha256sum" "fw_payload_oe_uboot.bin"
         if [ "$PRODUCT_NAME" = "qcow2_efi" ]; then
-	    copy_file_to_result "RISCV_VIRT_CODE.fd" "RISCV_VIRT_VARS.fd"
+            copy_file_to_result "RISCV_VIRT_CODE.fd" "RISCV_VIRT_VARS.fd"
         fi
     else
         copy_file_to_result "openEuler_${ISO_ARCH}.qcow2" "openEuler_${ISO_ARCH}.qcow2.sha256sum"
