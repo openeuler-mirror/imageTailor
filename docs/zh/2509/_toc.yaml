@@ -1,0 +1,6 @@
+label: imageTailor使用指南
+isManual: true
+description: 按需裁剪操作系统镜像中的包或文件
+sections:
+  - label: imageTailor使用指南
+    href: ./imagetailor_user_guide.md
