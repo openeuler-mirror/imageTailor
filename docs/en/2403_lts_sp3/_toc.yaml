@@ -1,0 +1,6 @@
+label: imageTailor User Guide
+isManual: true
+description: OS image tailoring by removing unneeded packages or files
+sections:
+  - label: imageTailor User Guide
+    href: ./imagetailor_userguide.md
