@@ -177,7 +177,7 @@ imageTailor 工具安装完成后，工具包的目录结构如下：
 
 - 配置安全加固策略
 
-    imageTailor 提供了默认地安全加固策略。用户可以根据业务需要，通过编辑 security_s.conf  对系统进行二次加固（仅在系统 ISO 镜像定制阶段），具体的操作方法请参见 《 [安全加固指南](https://docs.openeuler.org/zh/docs/24.03_LTS_SP2/server/security/secharden/os_hardening_overview.html) 》。
+    imageTailor 提供了默认地安全加固策略。用户可以根据业务需要，通过编辑 security_s.conf  对系统进行二次加固（仅在系统 ISO 镜像定制阶段），具体的操作方法请参见 《[安全加固指南](https://docs.openeuler.org/zh/docs/24.03_LTS_SP3/server/security/secharden/os_hardening_overview.html)》。
 
 - 制作操作系统 ISO 镜像
 
