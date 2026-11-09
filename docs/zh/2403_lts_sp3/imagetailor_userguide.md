@@ -155,7 +155,7 @@ imageTailor 工具安装完成后，工具包的目录结构如下：
 
 使用 imageTailor 工具定制系统的流程请参见下图：
 
-![](./figures/flowchart.png)
+![imageTailor 定制镜像流程：检查环境、定制业务包、生成并验证目标 ISO](./figures/flowchart.png)
 
 各流程含义如下：
 

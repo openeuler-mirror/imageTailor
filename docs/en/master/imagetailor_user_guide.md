@@ -162,7 +162,7 @@ This section describes how to use the imageTailor tool to package the service RP
 
 The following figure shows the process of using imageTailor to customize an image.
 
-![](./figures/flowchart.png)
+![imageTailor customization flow from environment checks through package customization and ISO generation](./figures/flowchart.png)
 
 The steps are described as follows:
 
